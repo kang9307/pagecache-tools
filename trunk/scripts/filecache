@@ -6,7 +6,7 @@ require 'fileutils'
 require 'cachedfiles'
 
 
-cfl = nil
+$cfiles = nil
 
 opts = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options]"
@@ -16,8 +16,8 @@ opts = OptionParser.new do |opts|
 
 
   opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
-    cfl = CachedFileList.new
-    cfl.snapshot do |idx, len, state, refcnt|
+    $cfiles = CachedFileList.new
+    $cfiles.snapshot do |idx, len, state, refcnt|
       if condition == nil or condition.empty?
         true
       else
@@ -27,33 +27,33 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-r", "--restore SRC", "restore the pre-saved snapshot from SRC file/dir.") do |src|
-    cfl = CachedFileList.restore src
+    $cfiles = CachedFileList.restore src
   end
 
   opts.on("-d", "--dump DST", "dump the snapshot to the DST dir.") do |dst|
     Dir.mkdir(dst) if !FileTest.exist?(dst)
-    cfl.dump dst
+    $cfiles.dump dst
   end
 
   opts.on("-u", "--union SRC", "the set union.") do |src|
-    cfl.union CachedFileList.restore(src) 
+    $cfiles.union CachedFileList.restore(src) 
   end
 
   opts.on("-i", "--intersection SRC", "the set intersect between pre-snapshort and SRC.") do |src|
-    cfl.intersection CachedFileList.restore(src) 
+    $cfiles.intersection CachedFileList.restore(src) 
   end
 
   opts.on("-f", "--difference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    cfl.difference CachedFileList.restore(src) 
+    $cfiles.difference CachedFileList.restore(src) 
   end
 
   opts.on("-F", "--rdifference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    cfl = CachedFileList.restore(src).difference cfl
+    $cfiles = CachedFileList.restore(src).difference $cfiles
   end
 
   opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern| 
 		p = Regexp.new(pattern)
-    cfl.delete_if do |cf|
+    $cfiles.delete_if do |cf|
 	    if p =~ cf.file
 		    true
 	    else
@@ -63,7 +63,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition| 
-    cfl.delete_if do |cf|
+    $cfiles.delete_if do |cf|
       if cf.seq == 0 # protect the block device file
         false
       else
@@ -80,7 +80,7 @@ opts = OptionParser.new do |opts|
 		end
 
 		mtab = FSTab.new '/etc/mtab'
-    cfl.each do |f|
+    $cfiles.each do |f|
 			# skip obscure files
 			fstat = File.lstat f.file
       next if fstat.file?
