@@ -156,7 +156,7 @@ class CachedFileList
   alias - difference
 
   def each
-    @cfiles.each_value do |cfile| 
+    @cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
         yield cfile
     end
     self
