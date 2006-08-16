@@ -115,7 +115,7 @@ function preload
 function schedule_defrag()
 {
     $FILECACHE --restore "$task_root/preload" \
-					--delete "cf.size > 500" \
+					--delete "f.size > 500" \
 					--dump "$task_root/defrag" 
 }
 
