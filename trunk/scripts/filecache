@@ -7,6 +7,7 @@ require 'cachedfiles'
 
 
 $cfiles = nil
+$verbose = 0
 
 opts = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options]"
@@ -14,6 +15,10 @@ opts = OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Available options:"
 
+
+  opts.on("-v", "--verbose [LEVEL]", "set level of verbosity") do |level|
+    $verbose = level || 1
+  end
 
   opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
     $cfiles = CachedFileList.new
@@ -82,7 +87,7 @@ opts = OptionParser.new do |opts|
 			# skip opened files
 			File.open(f.file) do |f|
 				if not f.flock(File::LOCK_EX | File::LOCK_NB)
-					puts "skiping opened file #{f.file}"
+					puts "skiping opened file #{f.file}" if $verbose >= 2
 					next
 				end
 				f.flock(File::LOCK_UN)

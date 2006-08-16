@@ -1,5 +1,6 @@
 #!/bin/sh
 
+VERBOSE=0
 CACHE_ROOT=/var/cache/bootcache
 . /etc/default/bootcache
 
@@ -145,7 +146,7 @@ function do_defrag()
 
 	# ok, someone insists on doing the defrag...
 	if [ ! -d $defrag_root ]; then
-		echo "Preparing defrag task $task for immediate run..."
+		[ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
 		schedule_defrag
 	fi
 
@@ -178,7 +179,7 @@ case "$1" in
         ;;
     defrag)
         schedule_defrag
-		echo "Defrag task $task scheduled, will run it on reboot/shutdown."
+		[ $VERBOSE -gt 0 ] && echo "Defrag task $task scheduled, will run it on reboot/shutdown."
         ;;
     defrag-now)
 		do_defrag
