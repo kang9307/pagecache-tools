@@ -42,8 +42,14 @@ class CachedFile
     end
   end
 
+  def blockdev?
+    @seq == 0
+  end
+
   def empty?
-    !FileTest.exist?(@file) or (@seq != 0 and @pages.empty?)
+		false if self.blockdev?
+		true if @pages.empty?
+		not FileTest.exist?(@file)
   end
 
   def union(cfile)
@@ -356,7 +362,7 @@ class CachedFileList
 
         next if fs == nil
 
-        if cfile.seq == 0  # device special file 
+        if cfile.blockdev?
 
           fd = File.open("#{dir}/#{File.basename fs.device_file}", FMODE) 
           fds[fs.device_id] = fd
