@@ -66,9 +66,9 @@ opts = OptionParser.new do |opts|
     end
   end
 
-  opts.on("--delete-if [CONDITION]", "delete the files satisfying the CONDITION.") do |condition| 
+  opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition| 
     cfl.delete_if do |cf|
-      if condition == nil or condition.empty? or cf.seq == 0
+      if cf.seq == 0 # protect the block device file
         false
       else
         eval condition 
