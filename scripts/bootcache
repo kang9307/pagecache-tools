@@ -101,10 +101,10 @@ function preload
 {
     [ ! -d "$task_root/preload" ] && return
 
+    renice 19 $$
+    
     files=`echo $task_root/preload/*`
 
-    ## ionice ??
-    
     for file in $files
     do
         [ ! -f file ] && continue
