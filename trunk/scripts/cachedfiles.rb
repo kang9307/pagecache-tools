@@ -378,39 +378,6 @@ class CachedFileList
     self
   end
 
-  def dump_file_list(dir)
-
-    fds = Hash.new
-
-    begin
-
-    @cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
-
-        fd = fds[cfile.dev]
-        fs = @@fstab[cfile.dev]
-
-        next if fs == nil
-
-        if cfile.seq == 0  # device special file 
-          fd = File.open("#{dir}/#{File.basename fs.device_file}", FMODE) 
-          fds[fs.device_id] = fd
-        else
-          fd.printf("%s\n", cfile.file) if File.stat(cfile.file).file?
-        end
-
-      end
-
-      fds.each_value do |fd|
-        fd.close
-      end
-
-    rescue => err
-      $stderr.puts "#{err.backtrace.join("\n")}:", "#{err}\n\n"
-    end
-
-    self
-  end
-
   private :loadfile
 
 end
