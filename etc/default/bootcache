@@ -4,3 +4,5 @@
 # boot time, change it to a directory that resides in the root partition.
 CACHE_ROOT=/var/cache/bootcache
 
+# Verbose level
+VERBOSE=0
