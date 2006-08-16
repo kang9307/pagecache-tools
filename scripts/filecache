@@ -53,13 +53,7 @@ opts = OptionParser.new do |opts|
 
   opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern| 
 		p = Regexp.new(pattern)
-    $cfiles.delete_if do |f|
-	    if p =~ f.file
-		    true
-	    else
-		    false
-	    end
-    end
+    $cfiles.delete_if { |f| p =~ f.file }
   end
 
   opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition| 
