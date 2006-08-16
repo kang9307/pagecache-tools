@@ -8,9 +8,8 @@ FMODE = File::CREAT | File::TRUNC | File::RDWR
 
 class CachedFile
 
-  attr_reader :dev, :file, :pages, :seq, :ino, :size, :cached, :percent, :state, :refcnt
-
-  attr_writer :ino, :size, :cached, :percent, :state, :refcnt
+  attr_reader		:dev, :file, :pages, :seq
+  attr_accessor	:ino, :size, :cached, :percent, :state, :refcnt
 
   def initialize(file, dev, seq) 
     @file       = file
