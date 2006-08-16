@@ -35,11 +35,6 @@ opts = OptionParser.new do |opts|
     cfl.dump dst
   end
 
-  opts.on("-D", "--dump-file-list DST", "dump the file list of snapshot to the DST dir.") do |dst|
-    Dir.mkdir(dst) if !FileTest.exist?(dst)
-    cfl.dump_file_list dst
-  end
-
   opts.on("-u", "--union SRC", "the set union.") do |src|
     cfl.union CachedFileList.restore(src) 
   end
