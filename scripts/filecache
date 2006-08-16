@@ -2,6 +2,7 @@
 
 require 'optparse'
 require 'ostruct'
+require 'fileutils'
 require 'cachedfiles'
 
 
@@ -73,6 +74,47 @@ opts = OptionParser.new do |opts|
       else
         eval condition 
       end
+    end
+  end
+
+  opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat| 
+
+		if not 'Ss016'.include? `runlevel`[2]
+			puts 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
+			if readline[0] != ?y then return end
+		end
+
+		mtab = FSTab.new '/etc/mtab'
+    cfl.each do |f|
+			# skip obscure files
+			fstat = File.lstat f.file
+      next if fstat.file?
+
+			# skip opened files
+			File.open(f.file) do |f|
+				if not f.flock(File::LOCK_EX | File::LOCK_NB)
+					puts "skiping opened file #{f.file}"
+					next
+				end
+				f.flock(File::LOCK_UN)
+			end
+
+			# poor man's defrag ;-)
+			tmpfile = mtab[f.dev].mount_point + '/' + habitat + '/' + File.basename(f.file)
+			begin
+				FileUtils.cp f.file, tmpfile, :preserve => true
+				tstat = File.lstat tmpfile
+				raise "not in same filesystem" if fstat.dev != tstat.dev
+				raise "file changed" if fstat.size != tstat.size or
+																fstat.mode != tstat.mode or
+																fstat.mtime != tstat.mtime
+				FileUtils.rm f.file
+				FileUtils.ln tmpfile, f.file
+				FileUtils.rm tmpfile
+			rescue Exception => msg
+				$stderr.puts "Failed to defrag file #{f.file} => #{tmpfile}: #{msg}."
+				exit 1
+			end
     end
   end
 

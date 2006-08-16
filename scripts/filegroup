@@ -1,30 +1,31 @@
 #!/bin/sh
 
-CACHE_ROOT=/var/cache/filegroup
-# .  etc/default/filegroup
+CACHE_ROOT=/var/cache/bootcache
+. /etc/default/bootcache
 
 FILECACHE=filecache
 RAFS=readahead-fs.sh
 PATH=.:$PATH
 
-task=$2
-task_root="${CACHE_ROOT}/$task"
+task=${2:-boot}
+task_root="${CACHE_ROOT}/${task}"
+[ ! -d ${task_root} ] && mkdir -p ${task_root}
 
 function print_help()
 {
     echo "Usage: $0 start/stop/preload/defrag/defrag-now <task>"
 }
 
-function rotate()
+function rotate_snapshots()
 {
-    [ -e ${task_root}/snapshot2 ] && rm -fr ${task_root}/snapshot2
-    [ -e ${task_root}/snapshot1 ] && mv ${task_root}/snapshot1 ${task_root}/snapshot2
-    [ -e ${task_root}/snapshot0 ] && mv ${task_root}/snapshot0 ${task_root}/snapshot1
+    [ -e $1/snapshot2 ] && rm -fr $1/snapshot2
+    [ -e $1/snapshot1 ] && mv $1/snapshot1 $1/snapshot2
+    [ -e $1/snapshot0 ] && mv $1/snapshot0 $1/snapshot1
 }
 
 function start()
 {
-    rotate ${task_root} 
+    rotate_snapshots ${task_root} 
 
     ${FILECACHE} --snapshot --dump "${task_root}/snapshot0/start"
 }
@@ -111,66 +112,55 @@ function preload
     done
 }
 
-function defrag()
+function schedule_defrag()
 {
-    ${FILECACHE} --restore "${task_root}/preload" --delete "cf.size > 500" \
-					--dump-file-list "${task_root}/defrag" 
-	echo ${task} >> ${CACHE_ROOT}/defrag
+    ${FILECACHE} --restore "${task_root}/preload" \
+					--delete "cf.size > 500" \
+					--dump "${task_root}/defrag" 
 }
 
-function defrag_now()
+function do_defrag()
 {
+	# prepare the defrag habitat dirs for each filesystem
+	defrag_habitat=".defrag-habitat-${task}"
+	while read devfile mp fstype options
+	do
+        dfrag_dir="${mp}/${defrag_habitat}"
 
-    runlevel=`runlevel | cut -d' ' -f2`
+		if [ -d ${dfrag_dir} ]; then continue; fi
+		if [ ! -b ${devfile} ]; then continue; fi
 
-    if [[ ! ${runlevel} =~ "[Ss016]" ]]; then
-        read -p "Warning: defraging in muti-user mode is dangerous. Continue?[y/N]" cont  
-        if [[ ! ${cont} =~ "^[yY]" ]]; then
-            return
-        fi
-    fi
+		if [ ${fstype} = "ext2" -o ${fstype} = "ext3" ]; then
+			mount -o oldalloc,remount ${mp}
+		fi
 
-    files=`echo ${task_root}/defrag/*`
+		mkdir ${dfrag_dir}
 
-    for file in ${files}
-    do
-        [ ! -f file ] && continue
+		if [ ${fstype} = "ext2" -o ${fstype} = "ext3" ]; then
+			mount -o orlov,remount ${mp}
+		fi
+	done < /etc/mtab
 
-        device=`basename file`
-        fstab=`grep ${device} /etc/fstab | sed -e "s/\t/ /g" | sed -e "s/  */ /g"` 
-        mp=`cat ${fstab} | cut -d' ' -f2`
-        fstype=`cat ${fstab} | cut -d' ' -f3`
+	defrag_root="${CACHE_ROOT}/$task/defrag"
 
-        dir="${mp}/.poor_mans_defrag-${task}"
+	# ok, someone insists on doing the defrag...
+	if [ ! -d ${defrag_root} ]; then
+		echo "Preparing defrag task ${task} for immediate run..."
+		schedule_defrag
+	fi
 
-        if [ ! -d ${dir} ]; then
-            if [ "${fstype}" == "ext2" || "${fstype}" == "ext3" ]; then
-                mount -o oldalloc,remount ${mp}
-            fi
-            mkdir -p ${dir}
-            if [ "${fstype}" == "ext2" || "${fstype}" == "ext3" ]; then
-                mount -o orlov,remount ${mp}
-            fi
-        fi
+	# do poor man's defrag
+	${FILECACHE} --restore "${defrag_root}" \
+					--defrag "${defrag_habitat}"
 
-        (
-        while true
-        do
-            read thefile
-            [ -z ${thefile} ] && break
-            dstfile=`basename ${thefile}`
-            cp ${thefile} ${dir}
-            mv ${dir}/${dstfile} ${thefile}
-        done < file
-        )
-
-    done
+	# cleanup the defrag root, or bootcache.sh will call us again and again!
+	if [ $? -eq 0 ]; then
+		rm -fr "${defrag_root}"
+	else
+		rm -fr "${defrag_root}.err"
+		mv "${defrag_root}" "${defrag_root}.err"
+	fi
 }
-
-[ $# -lt 2 ] && print_help && exit
-
-[ ! -e ${task_root} ] && mkdir -p ${task_root}
-[ ! -d ${task_root} ] && rm -fr ${task_root} && mkdir -p ${task_root}
 
 case "$1" in
     start)
@@ -187,10 +177,11 @@ case "$1" in
         reset_queue
         ;;
     defrag)
-        defrag
+        schedule_defrag
+		echo "Defrag task ${task} scheduled, will run it on reboot/shutdown."
         ;;
     defrag-now)
-        defrag_now
+		do_defrag
         ;;
     *)
         print_help
