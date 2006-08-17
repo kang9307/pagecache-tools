@@ -35,8 +35,8 @@ function stop()
 {
     $FILECACHE --snapshot --dump "$task_root/snapshot0/stop"
     $FILECACHE --restore "$task_root/snapshot0/stop" \
-					--difference "$task_root/snapshot0/start" \
-					--dump "$task_root/preload" 
+                    --difference "$task_root/snapshot0/start" \
+                    --dump "$task_root/preload" 
 }
 
 
@@ -116,51 +116,51 @@ function preload
 function schedule_defrag()
 {
     $FILECACHE --restore "$task_root/preload" \
-					--delete "f.size > 500" \
-					--dump "$task_root/defrag" 
+                    --delete "f.size > 500" \
+                    --dump "$task_root/defrag" 
 }
 
 function do_defrag()
 {
-	# prepare the defrag habitat dirs for each filesystem
-	defrag_habitat=".defrag-habitat-$task"
-	while read devfile mp fstype options
-	do
+    # prepare the defrag habitat dirs for each filesystem
+    defrag_habitat=".defrag-habitat-$task"
+    while read devfile mp fstype options
+    do
         dfrag_dir="$mp/$defrag_habitat"
 
-		if [ -d $dfrag_dir ]; then continue; fi
-		if [ ! -b $devfile ]; then continue; fi
+        if [ -d $dfrag_dir ]; then continue; fi
+        if [ ! -b $devfile ]; then continue; fi
 
-		if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
-			mount -o oldalloc,remount $mp
-		fi
+        if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
+            mount -o oldalloc,remount $mp
+        fi
 
-		mkdir $dfrag_dir
+        mkdir $dfrag_dir
 
-		if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
-			mount -o orlov,remount $mp
-		fi
-	done < /etc/mtab
+        if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
+            mount -o orlov,remount $mp
+        fi
+    done < /etc/mtab
 
-	defrag_root="$CACHE_ROOT/$task/defrag"
+    defrag_root="$CACHE_ROOT/$task/defrag"
 
-	# ok, someone insists on doing the defrag...
-	if [ ! -d $defrag_root ]; then
-		[ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
-		schedule_defrag
-	fi
+    # ok, someone insists on doing the defrag...
+    if [ ! -d $defrag_root ]; then
+        [ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
+        schedule_defrag
+    fi
 
-	# do poor man's defrag
-	$FILECACHE --restore "$defrag_root" \
-					--defrag "$defrag_habitat"
+    # do poor man's defrag
+    $FILECACHE --restore "$defrag_root" \
+                    --defrag "$defrag_habitat"
 
-	# cleanup the defrag root, or bootcache.sh will call us again and again!
-	if [ $? -eq 0 ]; then
-		rm -fr "$defrag_root"
-	else
-		rm -fr "$defrag_root.err"
-		mv "$defrag_root" "$defrag_root.err"
-	fi
+    # cleanup the defrag root, or bootcache.sh will call us again and again!
+    if [ $? -eq 0 ]; then
+        rm -fr "$defrag_root"
+    else
+        rm -fr "$defrag_root.err"
+        mv "$defrag_root" "$defrag_root.err"
+    fi
 }
 
 case "$1" in
@@ -179,14 +179,14 @@ case "$1" in
         ;;
     defrag)
         schedule_defrag
-		[ $VERBOSE -gt 0 ] && echo "Defrag task $task scheduled, will run it on reboot/shutdown."
+        [ $VERBOSE -gt 0 ] && echo "Defrag task $task scheduled, will run it on reboot/shutdown."
         ;;
     defrag-now)
-		do_defrag
+        do_defrag
         ;;
     *)
         print_help
         ;;
 esac
 
-# vim: ts=4 sw=4
+# vim: ts=4 sw=4 et
