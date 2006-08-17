@@ -9,11 +9,11 @@ $BDEV_NAME = 'bdev'
 class FileSystem
 
   def FileSystem.get_device_id(device_file)
-		if device_file == $BDEV_NAME
-			$BDEV_ID
-		else
-			File.stat(device_file).rdev
-		end
+    if device_file == $BDEV_NAME
+      $BDEV_ID
+    else
+      File.stat(device_file).rdev
+    end
   end
 
   def initialize (device_file, mount_point, fstype)
@@ -30,8 +30,8 @@ class FileSystem
     "FileSystem:\t#{major}:#{minor}\t#{device_file}\t#{mount_point}\t#{fstype}"
   end
 
-  def major()	@device_id >> 8   end
-  def minor()	@device_id & 0xff	end
+  def major() @device_id >> 8   end
+  def minor() @device_id & 0xff end
 
   attr_reader :device_id, :device_file, :mount_point, :fstype 
 
@@ -50,23 +50,23 @@ class FSTab
     File.open(file, 'r') do |file|
       file.each_line do |line|
 
-				dev, mp, type, options = line.split 
+        dev, mp, type, options = line.split 
 
-				next if not dev =~ /^\s*\/dev\//
-				next if mp == 'none'
-				next if type == 'swap'
-				next if options =~ /loop/
+        next if not dev =~ /^\s*\/dev\//
+        next if mp == 'none'
+        next if type == 'swap'
+        next if options =~ /loop/
 
-				fs = FileSystem.new(dev, mp, type)
-				@fstab[fs.device_id] = fs
+        fs = FileSystem.new(dev, mp, type)
+        @fstab[fs.device_id] = fs
 
       end # file.each_line
     end  # File.open
 
     @fstab.delete(0) # in case we get device_id=0 for hotplug devices.
 
-		# the filesystem for block special files
-		@fstab[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
+    # the filesystem for block special files
+    @fstab[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
  
   end
   
@@ -97,8 +97,8 @@ end
 #
 class CachedFile
 
-  attr_reader		:dev, :file, :pages, :seq
-  attr_accessor	:ino, :size, :cached, :percent, :state, :refcnt
+  attr_reader   :dev, :file, :pages, :seq
+  attr_accessor :ino, :size, :cached, :percent, :state, :refcnt
 
   def initialize(file, dev, seq) 
     @file       = file
@@ -122,7 +122,7 @@ class CachedFile
       @cached  = 4 * @pages.size    # Fix me: pagesize=4k ?
       if @size > 0
         @percent = (@cached.to_f / @size).to_i
-				@percent = 100 if @percent > 100
+        @percent = 100 if @percent > 100
       else
         @percent = 0
       end
@@ -136,9 +136,9 @@ class CachedFile
   end
 
   def empty?
-		false if self.blockdev?
-		true if @pages.empty?
-		not FileTest.exist?(@file)
+    false if self.blockdev?
+    true if @pages.empty?
+    not FileTest.exist?(@file)
   end
 
   def union(cfile)
@@ -349,25 +349,25 @@ class CachedFileList
         dev = "0x#{dev[0,5].delete(':')}".hex 
 
         if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
-					# handle block device
-					# - set dev to predefined $BDEV_ID
-					# - transform file name from digital form to real ones
+          # handle block device
+          # - set dev to predefined $BDEV_ID
+          # - transform file name from digital form to real ones
           dev  = $BDEV_ID
           fs   = @@fstab[file.delete('(:)').hex]
           if fs == nil
-						puts "unknown device file #{file}"
-						next
-					end
+            puts "unknown device file #{file}"
+            next
+          end
           file = fs.device_file
           cfile = CachedFile.new file, $BDEV_ID, 0 
         else
-					# handle normal files
-					# - complete file name to full path name
-					# - ignore dirs/symlinks
+          # handle normal files
+          # - complete file name to full path name
+          # - ignore dirs/symlinks
           fs = @@fstab[dev]
           next if fs == nil
-					file = fs.mount_point + file unless fs.mount_point == "/"
-					next unless File.lstat(file).file?
+          file = fs.mount_point + file unless fs.mount_point == "/"
+          next unless File.lstat(file).file?
           cfile = CachedFile.new file, dev, seq 
           seq = seq + 1;
         end
@@ -430,14 +430,14 @@ class CachedFileList
 
         if line[0] == ?/
           if fs == nil
-						stat = File.stat(line)
-						if stat.blockdev?
-							fs = @@fstab[$BDEV_ID]
-						else
-							fs = @@fstab[stat.dev]
-						end
+            stat = File.stat(line)
+            if stat.blockdev?
+              fs = @@fstab[$BDEV_ID]
+            else
+              fs = @@fstab[stat.dev]
+            end
           end
-					next if fs == nil
+          next if fs == nil
           if cfile != nil
             cfile.complete
             @cfiles[cfile.file] = cfile
@@ -456,22 +456,22 @@ class CachedFileList
   end
 
   def dump(dir)
-		fds = Hash.new
+    fds = Hash.new
 
-		@cfiles.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
-			fs = @@fstab[cfile.dev]
-			next if fs == nil
-			fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}",
-																		File::CREAT | File::TRUNC | File::RDWR)
-			fds[cfile.dev].printf("%s", cfile.to_s)
-		end
+    @cfiles.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
+      fs = @@fstab[cfile.dev]
+      next if fs == nil
+      fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}",
+                                    File::CREAT | File::TRUNC | File::RDWR)
+      fds[cfile.dev].printf("%s", cfile.to_s)
+    end
 
-		fds.each_value { |fd| fd.close }
+    fds.each_value { |fd| fd.close }
 
-		self
-	end
+    self
+  end
 
-	private :loadfile
+  private :loadfile
 
 end
 
@@ -533,7 +533,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern| 
-		p = Regexp.new(pattern)
+    p = Regexp.new(pattern)
     $cfiles.delete_if { |f| p =~ f.file }
   end
 
@@ -549,42 +549,42 @@ opts = OptionParser.new do |opts|
 
   opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat| 
 
-		if not 'Ss016'.include? `runlevel`[2]
-			puts 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
-			if readline[0] != ?y then return end
-		end
+    if not 'Ss016'.include? `runlevel`[2]
+      puts 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
+      if readline[0] != ?y then return end
+    end
 
-		mtab = FSTab.new '/etc/mtab'
+    mtab = FSTab.new '/etc/mtab'
     $cfiles.each do |f|
-			# skip obscure files
-			fstat = File.lstat f.file
+      # skip obscure files
+      fstat = File.lstat f.file
       next if fstat.file?
 
-			# skip opened files
-			File.open(f.file) do |f|
-				if not f.flock(File::LOCK_EX | File::LOCK_NB)
-					puts "skiping opened file #{f.file}" if $verbose >= 2
-					next
-				end
-				f.flock(File::LOCK_UN)
-			end
+      # skip opened files
+      File.open(f.file) do |f|
+        if not f.flock(File::LOCK_EX | File::LOCK_NB)
+          puts "skiping opened file #{f.file}" if $verbose >= 2
+          next
+        end
+        f.flock(File::LOCK_UN)
+      end
 
-			# poor man's defrag ;-)
-			tmpfile = mtab[f.dev].mount_point + '/' + habitat + '/' + File.basename(f.file)
-			begin
-				FileUtils.cp f.file, tmpfile, :preserve => true
-				tstat = File.lstat tmpfile
-				raise "not in same filesystem" if fstat.dev != tstat.dev
-				raise "file changed" if fstat.size != tstat.size or
-																fstat.mode != tstat.mode or
-																fstat.mtime != tstat.mtime
-				FileUtils.rm f.file
-				FileUtils.ln tmpfile, f.file
-				FileUtils.rm tmpfile
-			rescue Exception => msg
-				$stderr.puts "Failed to defrag file #{f.file} => #{tmpfile}: #{msg}."
-				exit 1
-			end
+      # poor man's defrag ;-)
+      tmpfile = mtab[f.dev].mount_point + '/' + habitat + '/' + File.basename(f.file)
+      begin
+        FileUtils.cp f.file, tmpfile, :preserve => true
+        tstat = File.lstat tmpfile
+        raise "not in same filesystem" if fstat.dev != tstat.dev
+        raise "file changed" if fstat.size != tstat.size or
+                                fstat.mode != tstat.mode or
+                                fstat.mtime != tstat.mtime
+        FileUtils.rm f.file
+        FileUtils.ln tmpfile, f.file
+        FileUtils.rm tmpfile
+      rescue Exception => msg
+        $stderr.puts "Failed to defrag file #{f.file} => #{tmpfile}: #{msg}."
+        exit 1
+      end
     end
   end
 
@@ -604,4 +604,4 @@ rescue => err
   $stderr.puts "#{err}\n"
 end
 
-# vim: sw=2 ts=2
+# vim: sw=2 ts=2 et
