@@ -56,7 +56,7 @@ class FSTab
       end # file.each_line
     end  # File.open
 
-    @fstab[0] = nil # in case we get device_id=0 for hotplug devices.
+    @fstab.delete(0) # in case we get device_id=0 for hotplug devices.
  
   end
   
