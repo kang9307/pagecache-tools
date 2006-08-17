@@ -1,6 +1,6 @@
 #!/usr/bin/ruby -wd
 
-$BDEV_ID = 0x0002
+$BDEV_ID = 0xFFFF0002
 $BDEV_NAME = 'bdev'
 
 #
