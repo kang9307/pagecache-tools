@@ -132,7 +132,7 @@ class CachedFile
   end
 
   def blockdev?
-    @device_id == $BDEV_ID
+    @dev == $BDEV_ID
   end
 
   def empty?
