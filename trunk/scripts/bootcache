@@ -104,6 +104,9 @@ function preload
     renice 19 $$
 
     devs=`cd "$task_root/preload"; echo *`
+    devs=${devs/bdev}
+
+    readahead-fs "$task_root/preload/bdev"
 
     for dev in $devs
     do
