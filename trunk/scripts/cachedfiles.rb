@@ -355,23 +355,25 @@ class CachedFileList
 
     begin
 
-    @cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
+			bdev_fd = File.new("#{dir}/bdev", FMODE)
 
-        fd = fds[cfile.dev]
-        fs = @@fstab[cfile.dev]
+			@cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
+
+				fs = @@fstab[cfile.dev]
 
         next if fs == nil
 
-        if cfile.blockdev?
-
-          fd = File.open("#{dir}/#{File.basename fs.device_file}", FMODE) 
-          fds[fs.device_id] = fd
-
+				if cfile.blockdev?
+					fd = bdev_fd
+				else
+					fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}", FMODE) 
+					fd = fds[cfile.dev]
         end
 
         fd.printf("%s", cfile.to_s) 
       end
 
+			bdev_fd.close
       fds.each_value do |fd|
         fd.close
       end
