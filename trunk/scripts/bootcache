@@ -102,14 +102,24 @@ function preload
     [ ! -d "$task_root/preload" ] && return
 
     renice 19 $$
-    
-    files=`echo $task_root/preload/*`
 
-    for file in $files
+    devs=`cd "$task_root/preload"; echo *`
+
+    for dev in $devs
     do
+        file="$task_root/preload/$dev"
         [ ! -f file ] && continue
 
-        $RAFS file &
+        (
+            while true
+            do
+                grep -q $dev /etc/mtab    && break
+                grep -q $dev /proc/mounts && break
+                sleep 1
+            done
+
+            readahead-fs $1
+        )&
     done
 }
 
