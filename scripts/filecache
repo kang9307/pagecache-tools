@@ -462,6 +462,8 @@ require 'fileutils'
 
 $verbose = 0
 
+$cfiles = CachedFileList.new
+
 opts = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options]"
 
@@ -474,7 +476,6 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
-    $cfiles = CachedFileList.new
     $cfiles.snapshot do |idx, len, state, refcnt|
       if condition == nil or condition.empty?
         true
