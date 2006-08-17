@@ -1,12 +1,19 @@
 #!/usr/bin/ruby -w
 
+$BDEV_ID = 0x0002
+$BDEV_NAME = 'bdev'
+
 #
 # Class representing a fstab/mtab entry extended with device_id.
 #
 class FileSystem
 
   def FileSystem.get_device_id(device_file)
-      File.stat(device_file).rdev
+		if device_file == $BDEV_NAME
+			$BDEV_ID
+		else
+			File.stat(device_file).rdev
+		end
   end
 
   def initialize (device_file, mount_point, fstype)
@@ -57,6 +64,9 @@ class FSTab
     end  # File.open
 
     @fstab.delete(0) # in case we get device_id=0 for hotplug devices.
+
+		# the filesystem for block special files
+		@fstab[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
  
   end
   
@@ -122,7 +132,7 @@ class CachedFile
   end
 
   def blockdev?
-    @seq == 0
+    @device_id == $BDEV_ID
   end
 
   def empty?
@@ -287,7 +297,6 @@ class CachedFileList
     File.open('/proc/filecache', File::RDWR) do |filecache| 
 
       filecache.syswrite("private session")
-      # filecache.syswrite("PRIVATE")
       read_filecache_index filecache
 
       @cfiles.each_value do |cfile|
@@ -340,17 +349,25 @@ class CachedFileList
         dev = "0x#{dev[0,5].delete(':')}".hex 
 
         if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
-          dev  = file.delete('(:)').hex
-          fs   = @@fstab[dev]
-          next if fs == nil
+					# handle block device
+					# - set dev to predefined $BDEV_ID
+					# - transform file name from digital form to real ones
+          dev  = $BDEV_ID
+          fs   = @@fstab[file.delete('(:)').hex]
+          if fs == nil
+						puts "unknown device file #{file}"
+						next
+					end
           file = fs.device_file
-          cfile = CachedFile.new file, dev, 0 
+          cfile = CachedFile.new file, $BDEV_ID, 0 
         else
+					# handle normal files
+					# - complete file name to full path name
+					# - ignore dirs/symlinks
           fs = @@fstab[dev]
           next if fs == nil
-          if fs.mount_point != "/" then
-            file = fs.mount_point + file 
-          end
+					file = fs.mount_point + file unless fs.mount_point == "/"
+					next unless File.lstat(file).file?
           cfile = CachedFile.new file, dev, seq 
           seq = seq + 1;
         end
@@ -413,8 +430,14 @@ class CachedFileList
 
         if line[0] == ?/
           if fs == nil
-            fs = @@fstab[FileSystem.get_device_id(line)]
+						stat = File.stat(line)
+						if stat.blockdev?
+							fs = @@fstab[$BDEV_ID]
+						else
+							fs = @@fstab[stat.dev]
+						end
           end
+					next if fs == nil
           if cfile != nil
             cfile.complete
             @cfiles[cfile.file] = cfile
@@ -433,43 +456,22 @@ class CachedFileList
   end
 
   def dump(dir)
+		fds = Hash.new
 
-    fds = Hash.new
+		@cfiles.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
+			fs = @@fstab[cfile.dev]
+			next if fs == nil
+			fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}",
+																		File::CREAT | File::TRUNC | File::RDWR)
+			fds[cfile.dev].printf("%s", cfile.to_s)
+		end
 
-    begin
+		fds.each_value { |fd| fd.close }
 
-			FMODE = File::CREAT | File::TRUNC | File::RDWR
-			bdev_fd = File.new("#{dir}/bdev", FMODE)
+		self
+	end
 
-			@cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
-
-				fs = @@fstab[cfile.dev]
-
-        next if fs == nil
-
-				if cfile.blockdev?
-					fd = bdev_fd
-				else
-					fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}", FMODE) 
-					fd = fds[cfile.dev]
-        end
-
-        fd.printf("%s", cfile.to_s) 
-      end
-
-			bdev_fd.close
-      fds.each_value do |fd|
-        fd.close
-      end
-
-    rescue => err
-      $stderr.puts "#{err.backtrace.join("\n")}:", "#{err}\n\n"
-    end
-
-    self
-  end
-
-  private :loadfile
+	private :loadfile
 
 end
 
