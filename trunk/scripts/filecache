@@ -6,22 +6,7 @@
 class FileSystem
 
   def FileSystem.get_device_id(device_file)
-
-    while FileTest.symlink?(device_file)
-      device_file = File.readlink(device_file)
-    end
-
-    if FileTest.exist?(device_file)
-
-      fstat = File.stat(device_file)
-
-      if fstat.blockdev? then
-        return fstat.rdev
-      end
-
-    end
-
-		return 0
+      File.stat(device_file).rdev
   end
 
   def initialize (device_file, mount_point, fstype)
