@@ -45,7 +45,7 @@ class FSTab
   # retrieve fs entries from /etc/fstab or /etc/mtab or /proc/mounts
   def initialize (file = '/etc/fstab')
 
-    @fstab = Hash.new
+    @fs_by_id = Hash.new
 
     File.open(file, 'r') do |file|
       file.each_line do |line|
@@ -58,31 +58,31 @@ class FSTab
         next if options =~ /loop/
 
         fs = FileSystem.new(dev, mp, type)
-        @fstab[fs.device_id] = fs
+        @fs_by_id[fs.device_id] = fs
 
       end # file.each_line
     end  # File.open
 
-    @fstab.delete(0) # in case we get device_id=0 for hotplug devices.
+    @fs_by_id.delete(0) # in case we get device_id=0 for hotplug devices.
 
     # the filesystem for block special files
-    @fstab[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
+    @fs_by_id[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
  
   end
   
   def each
-    @fstab.each_value { |fs| yield(fs) }
+    @fs_by_id.each_value { |fs| yield(fs) }
     self
   end
 
   def [] (device_id)
-    @fstab[device_id]
+    @fs_by_id[device_id]
   end
 
   def to_s
     ret = "FSTab:\n"
 
-    @fstab.each_value do |fs|
+    @fs_by_id.each_value do |fs|
       ret = ret + "#{fs.to_s}\n"
     end
 
