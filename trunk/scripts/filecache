@@ -210,14 +210,14 @@ class CachedFileList
   @@fstab = FSTab.new '/etc/mtab'
 
   def initialize
-    @cfiles = Hash.new
+    @cfile_by_name = Hash.new
   end
 
   def union(cfl)
     cfl.each do |cfile|
-      cf = @cfiles[cfile.file]
+      cf = @cfile_by_name[cfile.file]
       if cf == nil
-        @cfiles[cfile.file] = cfile
+        @cfile_by_name[cfile.file] = cfile
       else
         cf.union cfile
       end
@@ -227,49 +227,49 @@ class CachedFileList
   alias + union
 
   def intersection(cfl)
-    @cfiles.each_value do |cfile|
+    @cfile_by_name.each_value do |cfile|
       cf = cfl[cfile.file]
       if cf == nil
-        @cfiles.delete cfile.file
+        @cfile_by_name.delete cfile.file
       else
         cfile.intersection cf
       end
     end
-    @cfiles.delete_if do |key, cfile| cfile.empty? end
+    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
     self
   end
   alias & intersection
 
   def difference(cfl)
-    @cfiles.each_value do |cfile|
+    @cfile_by_name.each_value do |cfile|
       cf = cfl[cfile.file]
       if cf != nil
         cfile.difference cf 
       end
     end
-    @cfiles.delete_if do |key, cfile| cfile.empty? end
+    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
     self
   end
   alias - difference
 
   def each
-    @cfiles.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
+    @cfile_by_name.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
         yield cfile
     end
     self
   end
 
   def [](file)
-    @cfiles[file]
+    @cfile_by_name[file]
   end
 
   def delete(file)
-    @cfiles.delete file
+    @cfile_by_name.delete file
     self
   end
 
   def delete_if
-    @cfiles.delete_if do |key, cfile|
+    @cfile_by_name.delete_if do |key, cfile|
       yield(cfile)
     end
     self
@@ -299,7 +299,7 @@ class CachedFileList
       filecache.syswrite("private session")
       read_filecache_index filecache
 
-      @cfiles.each_value do |cfile|
+      @cfile_by_name.each_value do |cfile|
         filecache.rewind
         filecache.syswrite(cfile.file)
         filecache.each_line do |line|
@@ -312,7 +312,7 @@ class CachedFileList
       end
     end # File.open
 
-    @cfiles.delete_if do |key, cfile| cfile.empty? end
+    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
 
     self
   end
@@ -369,7 +369,7 @@ class CachedFileList
       cfile.state   = state
       cfile.refcnt  = refcnt.to_i
 
-      @cfiles[file] = cfile 
+      @cfile_by_name[file] = cfile 
     end
   end
 
@@ -380,13 +380,13 @@ class CachedFileList
       next if not File.lstat(file).file?
       seq = loadfile file
     end
-    @cfiles.delete_if do |key, cfile| cfile.empty? end
+    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
   end
 
   # Restore one partion's pre-saved snapshort of /proc/filecache from a file.
   def restore_from_file(file)
     loadfile file
-    @cfiles.delete_if do |key, cfile| cfile.empty? end
+    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
   end
 
   # Load the CachedFile info from a pre-saved files.
@@ -417,7 +417,7 @@ class CachedFileList
           next if fs == nil
           if cfile != nil
             cfile.complete
-            @cfiles[cfile.file] = cfile
+            @cfile_by_name[cfile.file] = cfile
           end
           cfile = CachedFile.new line, fs.device_id, seq
           seq = seq + 1
@@ -435,7 +435,7 @@ class CachedFileList
   def dump(dir)
     fds = Hash.new
 
-    @cfiles.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
+    @cfile_by_name.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
       fs = @@fstab[cfile.dev]
       next if fs == nil
       fds[cfile.dev] ||= File.open("#{dir}/#{File.basename fs.device_file}",
