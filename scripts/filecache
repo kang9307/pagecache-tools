@@ -1,4 +1,4 @@
-#!/usr/bin/ruby -w
+#!/usr/bin/ruby -wd
 
 $BDEV_ID = 0x0002
 $BDEV_NAME = 'bdev'
@@ -300,24 +300,16 @@ class CachedFileList
       read_filecache_index filecache
 
       @cfiles.each_value do |cfile|
-
-        begin
-          filecache.rewind
-          filecache.syswrite(cfile.file)
-          filecache.each_line do |line|
-            idx, len, state, refcnt = line.split
-            idx, len, refcnt = idx.to_i, len.to_i, refcnt.to_i
-            if yield(idx, len, state, refcnt) then
-              cfile.add idx, len
-            end
+        filecache.rewind
+        filecache.syswrite(cfile.file)
+        filecache.each_line do |line|
+          idx, len, state, refcnt = line.split
+          idx, len, refcnt = idx.to_i, len.to_i, refcnt.to_i
+          if yield(idx, len, state, refcnt) then
+            cfile.add idx, len
           end
-        rescue => err
-          # $stderr.puts "#{err.backtrace.join("\n")}:", "\t#{err} - #{cfile.file}\n\n"
-          $stderr.puts "#{err} - #{cfile.file}\n\n"
         end
-
       end
-
     end # File.open
 
     @cfiles.delete_if do |key, cfile| cfile.empty? end
@@ -328,87 +320,72 @@ class CachedFileList
   # get the cached file list from /proc/filecache.
   def read_filecache_index(filecache)
     seq = 1;
-    begin
-      filecache.rewind
-      filecache.syswrite("index")
-      filecache.each_line do |line|
+    filecache.rewind
+    filecache.syswrite("index")
+    filecache.each_line do |line|
+      next if line[0] == ?# 
 
-        next if line[0] == ?# 
+      line.gsub! '\011', "\011"  # ht
+      line.gsub! '\012', "\012"  # nl
+      line.gsub! '\040', "\040"  # sp
+      line.gsub! '\\',   "\\"    # \
 
-        line.gsub! '\011', "\011"  # ht
-        line.gsub! '\012', "\012"  # nl
-        line.gsub! '\040', "\040"  # sp
-        line.gsub! '\\',   "\\"    # \
+      ino, size, cached, cachedp, state, 
+        refcnt, dev, file = line.split
 
-        ino, size, cached, cachedp, state, 
-          refcnt, dev, file = line.split
+      next if file == '(noname)'
+      next if file =~ /\(deleted\)$/
 
-        next if file == '(noname)'
-        next if file =~ /\(deleted\)$/
+      dev = "0x#{dev[0,5].delete(':')}".hex 
 
-        dev = "0x#{dev[0,5].delete(':')}".hex 
-
-        if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
-          # handle block device
-          # - set dev to predefined $BDEV_ID
-          # - transform file name from digital form to real ones
-          dev  = $BDEV_ID
-          fs   = @@fstab[file.delete('(:)').hex]
-          if fs == nil
-            puts "unknown device file #{file}"
-            next
-          end
-          file = fs.device_file
-          cfile = CachedFile.new file, $BDEV_ID, 0 
-        else
-          # handle normal files
-          # - complete file name to full path name
-          # - ignore dirs/symlinks
-          fs = @@fstab[dev]
-          next if fs == nil
-          file = fs.mount_point + file unless fs.mount_point == "/"
-          next unless File.lstat(file).file?
-          cfile = CachedFile.new file, dev, seq 
-          seq = seq + 1;
+      if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
+        # handle block device
+        # - set dev to predefined $BDEV_ID
+        # - transform file name from digital form to real ones
+        dev = $BDEV_ID
+        fs  = @@fstab[file.delete('(:)').hex]
+        if fs == nil
+          puts "unknown device file #{file}"
+          next
         end
-
-
-        cfile.ino     = ino.to_i
-        cfile.size    = size.to_i
-        cfile.cached  = cached.to_i 
-        cfile.percent = cachedp.to_i
-        cfile.state   = state
-        cfile.refcnt  = refcnt.to_i
-
-        @cfiles[file] = cfile 
-
+        file  = fs.device_file
+        cfile = CachedFile.new file, $BDEV_ID, 0 
+      else
+        # handle normal files
+        # - complete file name to full path name
+        # - ignore dirs/symlinks
+        fs = @@fstab[dev]
+        next if fs == nil
+        file = fs.mount_point + file unless fs.mount_point == "/"
+        next unless File.lstat(file).file?
+        cfile = CachedFile.new file, dev, seq 
+        seq = seq + 1;
       end
-    rescue => err
-      $stderr.puts "#{err.backtrace.join("\n")}:", "#{err}\n\n"
+
+      cfile.ino     = ino.to_i
+      cfile.size    = size.to_i
+      cfile.cached  = cached.to_i 
+      cfile.percent = cachedp.to_i
+      cfile.state   = state
+      cfile.refcnt  = refcnt.to_i
+
+      @cfiles[file] = cfile 
     end
   end
 
   # Restore the pre-saved snapshot of /proc/filecache from the files under 'dir'.
   def restore_from_dir(dir)
-    begin
-      Dir.foreach(dir) do |file|
-        file = "#{dir}/#{file}"
-        next if not File.lstat(file).file?
-        seq = loadfile file
-      end
-    rescue => err
-      $stderr.puts "#{err.backtrace.join("\n")}:", "#{err}\n\n"
+    Dir.foreach(dir) do |file|
+      file = "#{dir}/#{file}"
+      next if not File.lstat(file).file?
+      seq = loadfile file
     end
     @cfiles.delete_if do |key, cfile| cfile.empty? end
   end
 
   # Restore one partion's pre-saved snapshort of /proc/filecache from a file.
   def restore_from_file(file)
-    begin
-      loadfile file
-    rescue => err
-      $stderr.puts "#{err.backtrace.join("\n")}:", "#{err}\n\n"
-    end
+    loadfile file
     @cfiles.delete_if do |key, cfile| cfile.empty? end
   end
 
@@ -593,15 +570,6 @@ opts = OptionParser.new do |opts|
   end
 end
 
-begin
-  opts.parse(ARGV)
-# rescue NoMethodError => err 
-#   puts "May not specify the option '--restore/--snapshot'."
-#   puts
-  # puts opts
-rescue => err
-  puts err.backtrace
-  $stderr.puts "#{err}\n"
-end
+opts.parse(ARGV)
 
 # vim: sw=2 ts=2 et
