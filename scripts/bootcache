@@ -10,6 +10,7 @@ PATH=.:$PATH
 task=${2:-boot}
 task_root="$CACHE_ROOT/$task"
 preload_root="$task_root/preload"
+defrag_root="$task_root/defrag"
 [ ! -d $task_root ] && mkdir -p $task_root
 
 function print_help()
@@ -130,7 +131,7 @@ function schedule_defrag()
 {
     $FILECACHE --restore "$preload_root" \
                     --delete "f.size > 500" \
-                    --dump "$task_root/defrag" 
+                    --dump "$defrag_root" 
 }
 
 function do_defrag()
@@ -154,8 +155,6 @@ function do_defrag()
             mount -o orlov,remount $mp
         fi
     done < /etc/mtab
-
-    defrag_root="$CACHE_ROOT/$task/defrag"
 
     # ok, someone insists on doing the defrag...
     if [ ! -d $defrag_root ]; then
