@@ -461,7 +461,7 @@ class CachedFileList
     @cfiles.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
       fs = @@fstab[cfile.dev]
       next if fs == nil
-      fds[cfile.dev] || = File.open("#{dir}/#{File.basename fs.device_file}",
+      fds[cfile.dev] ||= File.open("#{dir}/#{File.basename fs.device_file}",
                                     File::CREAT | File::TRUNC | File::RDWR)
       fds[cfile.dev].printf("%s", cfile.to_s)
     end
