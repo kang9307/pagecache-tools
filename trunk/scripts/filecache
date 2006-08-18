@@ -40,23 +40,21 @@ class FSTab
 
     @fs_by_id = Hash.new
 
-    File.open(file, 'r') do |file|
-      file.each_line do |line|
+    File.foreach(file) do |line|
 
-        dev, mp, fstype, options = line.split
+      dev, mp, fstype, options = line.split
 
-        next if mp[0] != ?/       # skip pseudo fs
-        next if fstype =~ /(tmpfs|ramfs)/
-        next if fstype =~ /(sysfs|rootfs|proc|debugfs|securityfs|sockfs)/
-        next if fstype =~ /(pipefs|futexfs|inotifyfs|eventpollfs|devpts)/
-        next if fstype =~ /(mqueue|usbfs|binfmt_misc)/
-        next if options =~ /loop/ # no need to readahead loop fs
+      next if mp[0] != ?/       # skip pseudo fs
+      next if fstype =~ /(tmpfs|ramfs)/
+      next if fstype =~ /(sysfs|rootfs|proc|debugfs|securityfs|sockfs)/
+      next if fstype =~ /(pipefs|futexfs|inotifyfs|eventpollfs|devpts)/
+      next if fstype =~ /(mqueue|usbfs|binfmt_misc)/
+      next if options =~ /loop/ # no need to readahead loop fs
 
-        fs = FileSystem.new(dev, mp, fstype)
-        @fs_by_id[fs.device_id] ||= fs
+      fs = FileSystem.new(dev, mp, fstype)
+      @fs_by_id[fs.device_id] ||= fs
 
-      end # file.each_line
-    end  # File.open
+    end  # File.foreach
 
     @fs_by_id.delete(0) # in case we get device_id=0 for hotplug devices.
 
@@ -174,8 +172,7 @@ class CachedFile
   end
 
   def empty?
-    true if @pages.empty?
-    not FileTest.exist?(@file)
+    @pages.empty?
   end
 
   def union(cfile)
@@ -393,25 +390,23 @@ class CachedFileList
 
     CachedFile.reset_seq
 
-    File.open(file, File::RDONLY) do |file|
-      cfile = nil
-      file.each_line do |line|
-        next if line.empty?
-        next if line[0] == ?#
+    cfile = nil
+    File.foreach(file) do |line|
+      next if line.empty?
+      next if line[0] == ?#
 
-        line.chomp!
-        if line[0] == ?/
-          cfile = CachedFile.new line
-          next unless File.exist?(line) # sorry for creating cfile just to abandon it :(
-          cfile.init_attrs
-          @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
-        elsif line =~ /^\d+\s+\d+/
-          idx, len = line.split
-          cfile.add_page_range idx.to_i, len.to_i
-        end
+      line.chomp!
+      if line[0] == ?/
+        cfile = CachedFile.new line
+        next unless File.exist?(line) # sorry for creating cfile just to abandon it :(
+        cfile.init_attrs
+        @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
+      elsif line =~ /^\d+\s+\d+/
+        idx, len = line.split
+        cfile.add_page_range idx.to_i, len.to_i
+      end
 
-      end # file.each_line
-    end # File.open
+    end # File.foreach
     self
   end
 

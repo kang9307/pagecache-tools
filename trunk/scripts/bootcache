@@ -5,12 +5,12 @@ CACHE_ROOT=/var/cache/bootcache
 . /etc/default/bootcache
 
 FILECACHE=filecache
-PATH=.:$PATH
 
 task=${2:-boot}
 task_root="$CACHE_ROOT/$task"
 preload_root="$task_root/preload"
 defrag_root="$task_root/defrag"
+
 [ ! -d $task_root ] && mkdir -p $task_root
 
 function print_help()
@@ -44,23 +44,6 @@ function stop()
 }
 
 
-# function save_queue
-# {
-#     QUEUES=`echo /sys/block/*/queue`
-#     for QUEUE in $QUEUE
-#     do
-#         SCHEDULER=`cat $QUEUE/scheduler | sed -e "s/^.*\[\(.*\)\].*$/\1/g"`
-#         NR_REQUESTS=`cat $QUEUE/nr_requests`
-#         MAX_SECTORS_KB=`cat $QUEUE/max_sectors_kb`
-#         FIFO_BATCH=`cat $QUEUE/iosched/fifo_batch`
-#         READ_EXPIRE=`cat $QUEUE/iosched/read_expire`
-#         READA_EXPIRE=`cat $QUEUE/iosched/reada_expire`
-#         WRITE_EXPIRE=`cat $QUEUE/iosched/write_expire`
-#         WRITES_STARVED=`cat $QUEUE/iosched/writes_starved`
-#         VFS_CACHE_PRESSURE=`cat /proc/sys/vm/vfs_cache_pressure`
-#     done
-# }
-
 function setup_queue
 {
     QUEUES=`echo /sys/block/*/queue`
@@ -83,16 +66,6 @@ function reset_queue
     QUEUES=`echo /sys/block/*/queue`
     for QUEUE in $QUEUES
     do
-        # [ -n "$SCHEDULER" ] && echo $SCHEDULER > $QUEUE/scheduler
-        # $NR_REQUESTS
-        # $MAX_SECTORS_KB
-        # $FIFO_BATCH
-        # $READ_EXPIRE
-        # $READA_EXPIRE
-        # $WRITE_EXPIRE
-        # $WRITES_STARVED
-        # $VFS_CACHE_PRESSURE
-
         echo 128        >   $QUEUE/nr_requests
         echo 100        >   $QUEUE/iosched/read_expire
         echo 3000       >   $QUEUE/iosched/write_expire
@@ -169,7 +142,7 @@ function do_defrag()
 
     # do poor man's defrag
     $FILECACHE --load "$defrag_root" \
-                    --defrag "$defrag_habitat"
+                --defrag "$defrag_habitat"
 
     # cleanup the defrag root, or bootcache.sh will call us again and again!
     if [ $? -eq 0 ]; then
@@ -190,10 +163,7 @@ function do_defrag()
 
 function wait_for_process_stop()
 {
-    while pidof $1 > /dev/null
-    do
-        sleep 1
-    done
+    while pidof $1 > /dev/null; do sleep 1; done
 }
 
 case "$1" in
@@ -204,7 +174,6 @@ case "$1" in
         stop
         ;;
     preload)
-        # save_queue
         trap "reset_queue; exit" EXIT HUP INT ABRT QUIT SEGV TERM
         setup_queue
         preload
