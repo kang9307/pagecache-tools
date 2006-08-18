@@ -14,7 +14,6 @@ CACHE_ROOT=/var/cache/bootcache
 .  /etc/default/bootcache
 
 PATH=/sbin:/bin
-grep -q bootcache /proc/cmdline && BOOTCACHE=bootcache
 
 function wait_for_process_start()
 {
@@ -73,14 +72,14 @@ function log_boot_time()
 	[ -z "$BOOTTIME_LOG_WAITCMD" ] && return
 
 	# sysv-init boot time
-	log_line "SYSV $(</proc/uptime) $BOOTCACHE \#  `date` `uname -a`"
+	log_line "SYSV $(</proc/uptime) $PRELOAD_TASK \#  `date` `uname -a`"
 
 	(
 		# do the wait
 		eval $BOOTTIME_LOG_WAITCMD
 
 		# GUI desktop ready time
-		log_line "GUI  $(</proc/uptime) $BOOTCACHE"
+		log_line "GUI  $(</proc/uptime) $PRELOAD_TASK"
 		log_line
 	)&
 }
@@ -113,7 +112,7 @@ function check_do_defrag()
 case "$1" in
 	start)
 		if [ "$RUNLEVEL" = "S" -a "$PREVLEVEL" = "N" ]; then
-			bootcache preload boot
+			[ "$PRELOAD_TASK" ] && bootcache preload $PRELOAD_TASK
 		else
 			log_boot_time
 			auto_filecache_snapshot
