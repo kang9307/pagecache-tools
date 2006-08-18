@@ -156,7 +156,7 @@ class CachedFile
   end
 
   def cached
-    4 * @pages.size    # TODO: handle PAGE_SIZE
+    4 * @pages.size    # TODO: respect PAGE_SIZE
   end
 
   def cached_percent
