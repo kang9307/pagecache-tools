@@ -8,23 +8,16 @@ $BDEV_NAME = 'bdev'
 #
 class FileSystem
 
-  def FileSystem.get_device_id(device_file)
-    if device_file == $BDEV_NAME
-      $BDEV_ID
-    else
-      File.stat(device_file).rdev
-    end
-  end
-
   def initialize (device_file, mount_point, fstype)
-
     @device_file = device_file 
     @mount_point = mount_point
     @fstype      = fstype
-    @device_id   = FileSystem.get_device_id @device_file
 
+    @device_id = 
+      if   @device_file == $BDEV_NAME then    $BDEV_ID
+      elsif File.exist?(@device_file) then  File.stat(@device_file).rdev
+      else @device_file.tr! '/', '-';       File.stat(@mount_point).dev end
   end
-
 
   def to_s
     "FileSystem:\t#{major}:#{minor}\t#{device_file}\t#{mount_point}\t#{fstype}"
@@ -50,15 +43,17 @@ class FSTab
     File.open(file, 'r') do |file|
       file.each_line do |line|
 
-        dev, mp, type, options = line.split 
+        dev, mp, fstype, options = line.split 
 
-        next if not dev =~ /^\s*\/dev\//
-        next if mp == 'none'
-        next if type == 'swap'
-        next if options =~ /loop/
+        next if mp[0] != ?/       # skip pseudo fs
+        next if fstype =~ /(tmpfs|ramfs)/
+        next if fstype =~ /(sysfs|rootfs|proc|debugfs|securityfs|sockfs)/
+        next if fstype =~ /(pipefs|futexfs|inotifyfs|eventpollfs|devpts)/
+        next if fstype =~ /(mqueue|usbfs|binfmt_misc)/
+        next if options =~ /loop/ # no need to readahead loop fs
 
-        fs = FileSystem.new(dev, mp, type)
-        @fs_by_id[fs.device_id] = fs
+        fs = FileSystem.new(dev, mp, fstype)
+        @fs_by_id[fs.device_id] ||= fs
 
       end # file.each_line
     end  # File.open
@@ -67,7 +62,8 @@ class FSTab
 
     # the filesystem for block special files
     @fs_by_id[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
- 
+
+    self
   end
   
   def each
