@@ -7,6 +7,10 @@ CACHE_ROOT=/var/cache/bootcache
 # Verbose level
 VERBOSE=0
 
+# Preload the 'boot' task files to speedup linux boot process.
+# To disable it, comment it out.
+PRELOAD_TASK=boot
+
 # When to log boot/startup time?
 # Specify a list of commands for waiting on the ready of usable desktop;
 # as soon as the commands terminate, the current time will be logged into
