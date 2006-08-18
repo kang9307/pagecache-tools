@@ -376,6 +376,7 @@ class CachedFileList
         fs = @@fstab[dev]
         next if fs == nil
         file = fs.mount_point + file unless fs.mount_point == "/"
+        next unless File.exist?(file)
         next unless File.lstat(file).file?
       end
 
@@ -413,6 +414,7 @@ class CachedFileList
         line.chomp!
         if line[0] == ?/
           cfile = CachedFile.new line
+          next unless File.exist?(line) # sorry for creating cfile just to abandon it :(
           cfile.init_attrs
           @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
         elsif line =~ /^\d+\s+\d+/
