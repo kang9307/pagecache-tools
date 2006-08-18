@@ -183,6 +183,14 @@ function do_defrag()
                 --dump "$preload_root"
 }
 
+function wait_for_process_stop()
+{
+    while pidof $1 > /dev/null
+    do
+        sleep 1
+    done
+}
+
 case "$1" in
     start)
         start
@@ -195,6 +203,7 @@ case "$1" in
         trap "reset_queue; exit" EXIT HUP INT ABRT QUIT SEGV TERM
         setup_queue
         preload
+        wait_for_process_stop readahead-fs
         reset_queue
         ;;
     defrag)
