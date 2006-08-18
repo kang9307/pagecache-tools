@@ -78,7 +78,7 @@ function preload
 {
     [ ! -d "$preload_root" ] && echo "$preload_root/ does not exist!" && return
 
-    renice 19 $$
+    [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$
 
     devs=`cd "$preload_root"; echo *`
     devs=${devs/bdev}
