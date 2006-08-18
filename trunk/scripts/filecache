@@ -276,7 +276,6 @@ class CachedFileList
         cfile.intersection cf
       end
     end
-    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
     self
   end
   alias & intersection
@@ -288,7 +287,6 @@ class CachedFileList
         cfile.difference cf 
       end
     end
-    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
     self
   end
   alias - difference
@@ -344,7 +342,6 @@ class CachedFileList
       end
     end
 
-    @cfile_by_name.delete_if { |key, cfile| cfile.empty? }
     self
   end
 
@@ -399,13 +396,11 @@ class CachedFileList
       next if not File.lstat(file).file?
       loadfile file
     end
-    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
   end
 
   # Restore one partion's pre-saved snapshort of /proc/filecache from a file.
   def restore_from_file(file)
     loadfile file
-    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
   end
 
   # Load the CachedFile info from a pre-saved files.
@@ -436,6 +431,7 @@ class CachedFileList
   def dump(dir)
     fds = Hash.new
 
+    @cfile_by_name.delete_if { |key, cfile| cfile.empty? }
     @cfile_by_name.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
       fs = @@fstab[cfile.dev]
       next if fs == nil
@@ -445,7 +441,6 @@ class CachedFileList
     end
 
     fds.each_value { |fd| fd.close }
-
     self
   end
 
