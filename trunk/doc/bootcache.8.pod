@@ -1,0 +1,68 @@
+=head1 NAME
+
+bootcache - page cache tool for fast system boot/application startup
+
+=head1 SYNOPSIS
+
+B<bootcache> {B<start>B<stop>B<preload>B<defrag>B<defrag-now>} [\I<task>]
+
+=head1 DESCRIPTION
+
+This manpage describes the bootcache tool.
+
+=head1 OPERATIONS
+
+B<bootcache> operates on a set of files related to a virtual I<task>.
+I<task> defaults to C<boot> if not specified.
+
+=over 4
+
+=item B<start>       take a snapshot of the cache state before running I<task>
+
+=item B<stop>        take a snapshot of the cache state after running I<task>, and get the files by doing a set difference.
+
+=item B<preload>     preload the files of I<task> into page cache.
+
+=item B<defrag>      schedule poor man's defrag to put files of I<task> together.
+
+=item B<defrag-now>  do the defrag now, instead of leaving it to shutdown/reboot time.
+
+=back
+
+=head1 FILES
+
+=over 4
+
+=item B</etc/default/bootcache>
+
+=item B</var/lib/bootcache/uptime>
+
+=item B</var/lib/bootcache/{task}/snapshot0/>
+
+=item B</var/lib/bootcache/{task}/snapshot1/>
+
+=item B</var/lib/bootcache/{task}/snapshot2/>
+
+=item B</var/lib/bootcache/{task}/preload/>
+
+=item B</var/lib/bootcache/{task}/defrag/>
+
+=item B<{mount-point}/.defrag-habitat-{task}/>
+
+=back
+
+=head1 EXAMPLES
+
+This is a sequence of invocations of B<bootcache> to preload firefox:
+
+   bootcache start firefox
+   firefox &
+   sleep 10s
+   bootcache stop firefox
+
+   bootcache preload firefox
+   firefox &
+
+=head1 SEE ALSO
+
+filecache(8)

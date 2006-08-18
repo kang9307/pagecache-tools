@@ -1,0 +1,122 @@
+=head1 NAME
+
+filecache - page cache tool for fast system boot/application startup
+
+=head1 SYNOPSIS
+
+B<filecache> [options]
+
+=head1 DESCRIPTION
+
+B<filecache> operates on an ordered set of cached files.
+
+=head1 OPTIONS
+
+Available options:
+
+=over 4
+
+=item B<-v>, B<--verbose> I<[LEVEL]>
+
+set level of verbosity
+
+=item B<-s>, B<--snapshot> I<[CONDITION]>
+
+take a snapshot of I</proc/filecache> with pages satisfy the CONDITION.
+CONDITION is a piece of ruby code that returns C<true>/C<false>.
+avaiable fields:
+
+=over 4
+
+=item B<idx>
+
+=item B<len>
+
+=item B<state>
+
+=item B<refcnt>
+
+=back
+
+=item B<-l>, B<--load> I<SRC>
+
+load the pre-saved snapshot from I<SRC> file/dir.
+
+=item B<-d>, B<--dump> I<DST>
+
+dump the snapshot to the I<DST> dir.
+
+=item B<-u>, B<--union> I<SRC>            the set union.
+
+=item B<-i>, B<--intersection> I<SRC>     the set intersect between pre-snapshort and I<SRC>.
+
+=item B<-f>, B<--difference> I<SRC>       the set difference between pre-snapshort and I<SRC>.
+
+=item B<-F>, B<--rdifference> I<SRC>      the set difference between pre-snapshort and I<SRC>.
+
+=item        B<--prune-path> I<PATTERN>   exclude files matching PATTERN.
+
+=item        B<--delete-if> I<CONDITION>
+
+delete files satisfying I<CONDITION>.
+available fields:
+
+=over 4
+
+=item B<f.dev>
+
+=item B<f.file>
+
+=item B<f.pages>
+
+=item B<f.seq>
+
+=item B<f.ino>
+
+=item B<f.size>            file size in KB
+
+=item B<f.cached>          cached size in KB
+
+=item B<f.cached_percent>
+
+=item B<f.state>           R:referenced A:active U:uptodate D:dirty W:writeback M:mmap
+
+=item B<f.refcnt>
+
+=item B<f.blockdev?>
+
+=item B<f.empty?>
+
+=back
+
+
+=item        B<--defrag> I<HABITAT>
+
+do poor man's defrag via dir I<HABITAT>.
+
+=item B<-h>, B<--help>                    Show this message.
+
+=back
+
+=head1 FILES
+
+=over 4
+
+
+=item B<{dstdir}/bdev>
+
+=item B<{dstdir}/{devname}>
+
+=item B<{dstdir}/{nfspath}>
+
+=back
+
+=head1 EXAMPLES
+
+To save a copy of the current cache contents:
+
+   filecache --snapshot --dump /tmp/`date +'%F'`/
+
+=head1 SEE ALSO
+
+bootcache(8)
