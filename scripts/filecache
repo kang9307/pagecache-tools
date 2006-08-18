@@ -178,7 +178,6 @@ class CachedFile
   end
 
   def empty?
-    false if self.blockdev?
     true if @pages.empty?
     not FileTest.exist?(@file)
   end
@@ -512,13 +511,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition| 
-    $cfiles.delete_if do |f|
-      if f.blockdev?
-        false
-      else
-        eval condition 
-      end
-    end
+    $cfiles.delete_if { |f| eval condition }
   end
 
   opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat| 
