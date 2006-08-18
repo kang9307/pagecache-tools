@@ -97,38 +97,80 @@ end
 #
 class CachedFile
 
-  attr_reader   :dev, :file, :pages, :seq
-  attr_accessor :ino, :size, :cached, :percent, :state, :refcnt
-
-  def initialize(file, dev, seq) 
-    @file       = file
-    @dev        = dev
-    @seq        = seq
-    @pages      = Array.new
+  def CachedFile.reset_seq
+    @@seq = 0
   end
 
-  def add(idx, len = 1)
-    for i in 0...len
-      @pages << idx+i
+  def CachedFile.filecache
+    unless defined? @@filecache
+      @@filecache = File.open('/proc/filecache', File::RDWR)
+      @@filecache.syswrite 'private session'
+      @@filecache.rewind
+    end
+    @@filecache
+  end
+
+  attr_reader   :dev, :file, :pages, :seq
+  attr_accessor :ino, :size, :state, :refcnt
+
+  def initialize(file) 
+    @file = file
+    @seq  = @@seq
+    @@seq = @@seq + 1
+    @pages = []
+  end
+
+  def init_pages
+    filecache = CachedFile.filecache
+    filecache.rewind
+    filecache.syswrite @file
+    filecache.rewind
+    filecache.each_line do |line|
+      idx, len, state, refcnt = line.split
+      idx, len, refcnt = idx.to_i, len.to_i, refcnt.to_i
+      next unless yield(idx, len, state, refcnt)
+      self.add_page_range idx, len
+    end
+  end 
+
+  def add_page_range(idx, len = 1)
+    for i in idx...(idx+len)
+      @pages << i
     end
     self
   end
 
-  def complete
-    if not empty?
-      stat     = File.lstat(@file)
-      @ino     = stat.ino 
-      @size    = (stat.size + 1023) / 1024
-      @cached  = 4 * @pages.size    # Fix me: pagesize=4k ?
-      if @size > 0
-        @percent = (@cached.to_f / @size).to_i
-        @percent = 100 if @percent > 100
-      else
-        @percent = 0
-      end
-      @state   = "--"
-      @refcnt  = 0
+  def init_attrs(line = nil)
+    if line
+      ino, size, cached, cachedp, state, 
+        refcnt, dev, file = line.split
+      @state  = state
+      @refcnt = refcnt.to_i
     end
+
+    stat = File.lstat(@file)
+    if stat.blockdev?
+      @dev = $BDEV_ID
+    else
+      @dev = stat.dev
+    end
+
+    @ino     = stat.ino 
+    @size    = (stat.size + 1023) / 1024
+  end
+
+  def cached
+    4 * @pages.size    # TODO: handle PAGE_SIZE
+  end
+
+  def cached_percent
+    if @size > 0
+      percent = (self.cached / @size.to_f).to_i
+      percent = 100 if percent > 100
+    else
+      percent = 0
+    end
+    percent
   end
 
   def blockdev?
@@ -169,8 +211,8 @@ class CachedFile
     idx = 0;
     len = 0;
 
-    pages.sort!
-    pages.each do |page|
+    @pages.sort!
+    @pages.each do |page|
       if idx + len == page
         len = len + 1
       else
@@ -192,7 +234,7 @@ class CachedFile
   def to_s
     list = page_ranges
 
-    s = "#{file}\n"
+    s = "#{@file}\n"
     list.each do |page|
       s = s + "#{page[0]}\t#{page[1]}\n"
     end
@@ -292,85 +334,63 @@ class CachedFileList
   end
 
   # Take a snapshot of /proc/filecache.
-  def snapshot 
+  def snapshot(condition = 'true')
+    filecache = CachedFile.filecache
 
-    File.open('/proc/filecache', File::RDWR) do |filecache| 
+    read_filecache_index filecache
 
-      filecache.syswrite("private session")
-      read_filecache_index filecache
-
-      @cfile_by_name.each_value do |cfile|
-        filecache.rewind
-        filecache.syswrite(cfile.file)
-        filecache.each_line do |line|
-          idx, len, state, refcnt = line.split
-          idx, len, refcnt = idx.to_i, len.to_i, refcnt.to_i
-          if yield(idx, len, state, refcnt) then
-            cfile.add idx, len
-          end
-        end
+    @cfile_by_name.each_value do |cfile|
+      cfile.init_pages do |idx, len, state, refcnt|
+        eval condition 
       end
-    end # File.open
+    end
 
-    @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
-
+    @cfile_by_name.delete_if { |key, cfile| cfile.empty? }
     self
   end
 
   # get the cached file list from /proc/filecache.
   def read_filecache_index(filecache)
-    seq = 1;
+    CachedFile.reset_seq
     filecache.rewind
-    filecache.syswrite("index")
+    filecache.syswrite('index')
+    filecache.rewind
     filecache.each_line do |line|
       next if line[0] == ?# 
 
-      line.gsub! '\011', "\011"  # ht
-      line.gsub! '\012', "\012"  # nl
-      line.gsub! '\040', "\040"  # sp
-      line.gsub! '\\',   "\\"    # \
-
-      ino, size, cached, cachedp, state, 
-        refcnt, dev, file = line.split
-
+      dev, file = line.split.values_at(-2, -1)
       next if file == '(noname)'
       next if file =~ /\(deleted\)$/
-
-      dev = "0x#{dev[0,5].delete(':')}".hex 
+      file.gsub! '\011', "\011"  # ht
+      file.gsub! '\012', "\012"  # nl
+      file.gsub! '\040', "\040"  # sp
+      file.gsub! '\\',   "\\"    # \
 
       if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
         # handle block device
-        # - set dev to predefined $BDEV_ID
         # - transform file name from digital form to real ones
-        dev = $BDEV_ID
-        fs  = @@fstab[file.delete('(:)').hex]
+        dev = file.delete('(:)').hex
+        fs  = @@fstab[dev]
         if fs == nil
           puts "unknown device file #{file}"
           next
         end
         file  = fs.device_file
-        cfile = CachedFile.new file, $BDEV_ID, 0 
       else
         # handle normal files
-        # - complete file name to full path name
+        # - expand file name to full path name
         # - ignore dirs/symlinks
+        dev = "0x#{dev[0,5].delete(':')}".hex
         fs = @@fstab[dev]
         next if fs == nil
         file = fs.mount_point + file unless fs.mount_point == "/"
         next unless File.lstat(file).file?
-        cfile = CachedFile.new file, dev, seq 
-        seq = seq + 1;
       end
 
-      cfile.ino     = ino.to_i
-      cfile.size    = size.to_i
-      cfile.cached  = cached.to_i 
-      cfile.percent = cachedp.to_i
-      cfile.state   = state
-      cfile.refcnt  = refcnt.to_i
-
+      cfile = CachedFile.new file
+      cfile.init_attrs line
       @cfile_by_name[file] = cfile 
-    end
+    end # filecache.each_line
   end
 
   # Restore the pre-saved snapshot of /proc/filecache from the files under 'dir'.
@@ -378,7 +398,7 @@ class CachedFileList
     Dir.foreach(dir) do |file|
       file = "#{dir}/#{file}"
       next if not File.lstat(file).file?
-      seq = loadfile file
+      loadfile file
     end
     @cfile_by_name.delete_if do |key, cfile| cfile.empty? end
   end
@@ -392,44 +412,26 @@ class CachedFileList
   # Load the CachedFile info from a pre-saved files.
   def loadfile(file)
 
-    seq = 0
+    CachedFile.reset_seq
 
     File.open(file, File::RDONLY) do |file|
-
       cfile = nil
-      fs    = nil
       file.each_line do |line|
-
         next if line.empty?
         next if line[0] == ?#
 
         line.chomp!
-
         if line[0] == ?/
-          if fs == nil
-            stat = File.stat(line)
-            if stat.blockdev?
-              fs = @@fstab[$BDEV_ID]
-            else
-              fs = @@fstab[stat.dev]
-            end
-          end
-          next if fs == nil
-          if cfile != nil
-            cfile.complete
-            @cfile_by_name[cfile.file] = cfile
-          end
-          cfile = CachedFile.new line, fs.device_id, seq
-          seq = seq + 1
-        else
+          cfile = CachedFile.new line
+          cfile.init_attrs
+          @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
+        elsif line =~ /^\d+\s+\d+/
           idx, len = line.split
-          cfile.add idx.to_i, len.to_i 
+          cfile.add_page_range idx.to_i, len.to_i 
         end
 
-      end
-
+      end # file.each_line
     end # File.open
-
   end
 
   def dump(dir)
@@ -476,13 +478,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
-    $cfiles.snapshot do |idx, len, state, refcnt|
-      if condition == nil or condition.empty?
-        true
-      else
-        eval condition 
-      end
-    end
+    $cfiles.snapshot(condition || 'true')
   end
 
   opts.on("-r", "--restore SRC", "restore the pre-saved snapshot from SRC file/dir.") do |src|
