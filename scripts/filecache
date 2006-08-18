@@ -248,6 +248,7 @@ class CachedFileList
 
   def initialize
     @cfile_by_name = Hash.new
+    self
   end
 
   def union(cfl)
@@ -310,20 +311,21 @@ class CachedFileList
     self
   end
 
-  def CachedFileList.restore(input)
-    cfl = CachedFileList.new
-    if input == nil or input.empty?
-      cfl.snapshot do |idx,len,|
-        len > 0
+  # Restore the pre-saved snapshot of /proc/filecache from a file or dir
+  def restore(path)
+    case File.stat(path).ftype
+    when 'file'
+      loadfile path
+    when 'directory'
+      Dir.foreach(path) do |file|
+        file = "#{path}/#{file}"
+        next unless File.stat(file).file?
+        loadfile file
       end
     else
-      if File.stat(input).file?
-        cfl.restore_from_file input
-      else
-        cfl.restore_from_dir input
-      end
+      $stderr.puts "#{@path} not a file or directory."
     end
-    cfl
+    self
   end
 
   # Take a snapshot of /proc/filecache.
@@ -384,20 +386,6 @@ class CachedFileList
       cfile.init_attrs line
       @cfile_by_name[file] = cfile
     end # filecache.each_line
-  end
-
-  # Restore the pre-saved snapshot of /proc/filecache from the files under 'dir'.
-  def restore_from_dir(dir)
-    Dir.foreach(dir) do |file|
-      file = "#{dir}/#{file}"
-      next if not File.lstat(file).file?
-      loadfile file
-    end
-  end
-
-  # Restore one partion's pre-saved snapshort of /proc/filecache from a file.
-  def restore_from_file(file)
-    loadfile file
   end
 
   # Load the CachedFile info from a pre-saved files.
@@ -474,7 +462,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-r", "--restore SRC", "restore the pre-saved snapshot from SRC file/dir.") do |src|
-    $cfiles = CachedFileList.restore src
+    $cfiles.restore src
   end
 
   opts.on("-d", "--dump DST", "dump the snapshot to the DST dir.") do |dst|
@@ -483,19 +471,21 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-u", "--union SRC", "the set union.") do |src|
-    $cfiles.union CachedFileList.restore(src)
+    $cfiles.union CachedFileList.new.restore(src)
   end
 
   opts.on("-i", "--intersection SRC", "the set intersect between pre-snapshort and SRC.") do |src|
-    $cfiles.intersection CachedFileList.restore(src)
+    $cfiles.intersection CachedFileList.new.restore(src)
   end
 
   opts.on("-f", "--difference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    $cfiles.difference CachedFileList.restore(src)
+    $cfiles.difference CachedFileList.new.restore(src)
   end
 
   opts.on("-F", "--rdifference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    $cfiles = CachedFileList.restore(src).difference $cfiles
+    c = CachedFileList.new.restore(src)
+    c.difference $cfiles
+    $cfiles = c
   end
 
   opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern|
