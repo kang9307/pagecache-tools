@@ -130,7 +130,7 @@ function preload
 function schedule_defrag()
 {
     $FILECACHE --load "$preload_root" \
-                    --delete "f.size > 500" \
+                    --delete-if "f.size > 500" \
                     --dump "$defrag_root"
 }
 
@@ -172,7 +172,15 @@ function do_defrag()
     else
         rm -fr "$defrag_root.err"
         mv "$defrag_root" "$defrag_root.err"
+        return
     fi
+
+    # update the moved fs metadata
+    # it will include old metadata from the deleted inodes
+    # so running an update on the next boot is recommended
+    $FILECACHE --snapshot --delete-if "not f.blockdev?" \
+                --union "$preload_root/bdev" \
+                --dump "$preload_root"
 }
 
 case "$1" in
@@ -191,7 +199,11 @@ case "$1" in
         ;;
     defrag)
         schedule_defrag
-        [ $VERBOSE -gt 0 ] && echo "Defrag task $task scheduled, will run it on reboot/shutdown."
+        if [ $VERBOSE -gt 0 ]; then
+            echo "Defrag task $task scheduled, will run it on reboot/shutdown."
+            echo "It is recommended to take a new snapshot on next boot,"
+            echo "for the defrag will make our metadata info out of sync."
+        fi
         ;;
     defrag-now)
         do_defrag
