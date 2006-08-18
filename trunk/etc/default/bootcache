@@ -11,4 +11,9 @@ VERBOSE=0
 # Specify a list of commands for waiting on the ready of usable desktop;
 # as soon as the commands terminate, the current time will be logged into
 # $CACHE_ROOT/uptime.  You can comment it out to disable boot time logging.
-# BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
+BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
+
+# When to take a new snapshot of the /proc/filecache?
+# Please specify a list of waiting commands.
+# Disable auto-snapshoting by commenting it out.
+CACHE_SNAPSHOT_WAITCMD='memory_above_any 80% 300M'
