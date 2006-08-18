@@ -37,6 +37,32 @@ function wait_for_process()
 	done
 }
 
+function memory_above_any()
+{
+	while true
+	do
+		sleep 1
+		{
+			read MemTotal total_kb unit;
+			read MemFree   free_kb unit;
+		} < /proc/meminfo
+		let 'used_kb = total_kb - free_kb'
+
+		for size in $*
+		do
+			if   [ $size != ${size%%%} ]; then
+				percent=${size%%%}
+				let 'min_kb = percent * total_kb / 100'
+			elif [ $size != ${size%%M} ]; then
+				megabyte=${size%%M}
+				let 'min_kb = megabyte * 1024'
+			fi
+
+			[ $used_kb -gt $min_kb ] && return
+		done
+	done
+}
+
 function log_line()
 {
 	echo $@ >> $CACHE_ROOT/uptime
@@ -44,9 +70,7 @@ function log_line()
 
 function log_boot_time()
 {
-	if [ -z "$BOOTTIME_LOG_WAITCMD" ]; then
-		return
-	fi
+	[ -z "$BOOTTIME_LOG_WAITCMD" ] && return
 
 	# sysv-init boot time
 	log_line "SYSV $(</proc/uptime) $BOOTCACHE \#  `date` `uname -a`"
@@ -61,6 +85,19 @@ function log_boot_time()
 	)&
 }
 
+function auto_filecache_snapshot()
+{
+	[ -z "$CACHE_SNAPSHOT_WAITCMD" ] && return
+
+	(
+		# do the wait
+		eval $CACHE_SNAPSHOT_WAITCMD
+
+		# take a snapshot of /proc/filecache
+		bootcache stop boot
+	)&
+}
+	
 function check_do_defrag()
 {
 	tasks=`cd $CACHE_ROOT; echo *`
@@ -79,6 +116,7 @@ case "$1" in
 			bootcache preload boot
 		else
 			log_boot_time
+			auto_filecache_snapshot
 		fi
 		;;
 	stop)
