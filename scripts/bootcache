@@ -133,7 +133,7 @@ function preload
 function schedule_defrag()
 {
     $FILECACHE --load "$preload_root" \
-                    --delete-if 'f.size > 500' \
+                    --delete-if 'f.size > 200' \
                     --prune-path '^/bin/' \
                     --prune-path '^/lib/' \
                     --dump "$defrag_root"
