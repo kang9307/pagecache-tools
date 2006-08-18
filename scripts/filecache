@@ -311,23 +311,6 @@ class CachedFileList
     self
   end
 
-  # Restore the pre-saved snapshot of /proc/filecache from a file or dir
-  def restore(path)
-    case File.stat(path).ftype
-    when 'file'
-      loadfile path
-    when 'directory'
-      Dir.foreach(path) do |file|
-        file = "#{path}/#{file}"
-        next unless File.stat(file).file?
-        loadfile file
-      end
-    else
-      $stderr.puts "#{@path} not a file or directory."
-    end
-    self
-  end
-
   # Take a snapshot of /proc/filecache.
   def snapshot(condition = 'true')
     filecache = CachedFile.filecache
@@ -388,8 +371,25 @@ class CachedFileList
     end # filecache.each_line
   end
 
-  # Load the CachedFile info from a pre-saved files.
-  def loadfile(file)
+  # Load the pre-saved snapshot of /proc/filecache from a file or dir
+  def load(path)
+    case File.stat(path).ftype
+    when 'file'
+      load_file path
+    when 'directory'
+      Dir.foreach(path) do |file|
+        file = "#{path}/#{file}"
+        next unless File.stat(file).file?
+        load_file file
+      end
+    else
+      $stderr.puts "#{@path} not a file or directory."
+    end
+    self
+  end
+
+  # Load cached files' info from a pre-saved file.
+  def load_file(file)
 
     CachedFile.reset_seq
 
@@ -412,6 +412,7 @@ class CachedFileList
 
       end # file.each_line
     end # File.open
+    self
   end
 
   def dump(dir)
@@ -429,8 +430,6 @@ class CachedFileList
     fds.each_value { |fd| fd.close }
     self
   end
-
-  private :loadfile
 
 end
 
@@ -461,8 +460,8 @@ opts = OptionParser.new do |opts|
     $cfiles.snapshot(condition || 'true')
   end
 
-  opts.on("-r", "--restore SRC", "restore the pre-saved snapshot from SRC file/dir.") do |src|
-    $cfiles.restore src
+  opts.on("-l", "--load SRC", "load the pre-saved snapshot from SRC file/dir.") do |src|
+    $cfiles.load src
   end
 
   opts.on("-d", "--dump DST", "dump the snapshot to the DST dir.") do |dst|
@@ -471,19 +470,19 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-u", "--union SRC", "the set union.") do |src|
-    $cfiles.union CachedFileList.new.restore(src)
+    $cfiles.union CachedFileList.new.load(src)
   end
 
   opts.on("-i", "--intersection SRC", "the set intersect between pre-snapshort and SRC.") do |src|
-    $cfiles.intersection CachedFileList.new.restore(src)
+    $cfiles.intersection CachedFileList.new.load(src)
   end
 
   opts.on("-f", "--difference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    $cfiles.difference CachedFileList.new.restore(src)
+    $cfiles.difference CachedFileList.new.load(src)
   end
 
   opts.on("-F", "--rdifference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    c = CachedFileList.new.restore(src)
+    c = CachedFileList.new.load(src)
     c.difference $cfiles
     $cfiles = c
   end
