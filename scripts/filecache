@@ -9,11 +9,11 @@ $BDEV_NAME = 'bdev'
 class FileSystem
 
   def initialize (device_file, mount_point, fstype)
-    @device_file = device_file 
+    @device_file = device_file
     @mount_point = mount_point
     @fstype      = fstype
 
-    @device_id = 
+    @device_id =
       if   @device_file == $BDEV_NAME then    $BDEV_ID
       elsif File.exist?(@device_file) then  File.stat(@device_file).rdev
       else @device_file.tr! '/', '-';       File.stat(@mount_point).dev end
@@ -26,7 +26,7 @@ class FileSystem
   def major() @device_id >> 8   end
   def minor() @device_id & 0xff end
 
-  attr_reader :device_id, :device_file, :mount_point, :fstype 
+  attr_reader :device_id, :device_file, :mount_point, :fstype
 
 end
 
@@ -43,7 +43,7 @@ class FSTab
     File.open(file, 'r') do |file|
       file.each_line do |line|
 
-        dev, mp, fstype, options = line.split 
+        dev, mp, fstype, options = line.split
 
         next if mp[0] != ?/       # skip pseudo fs
         next if fstype =~ /(tmpfs|ramfs)/
@@ -65,7 +65,7 @@ class FSTab
 
     self
   end
-  
+
   def each
     @fs_by_id.each_value { |fs| yield(fs) }
     self
@@ -82,7 +82,7 @@ class FSTab
       ret = ret + "#{fs.to_s}\n"
     end
 
-    ret 
+    ret
   end
 
 end
@@ -109,7 +109,7 @@ class CachedFile
   attr_reader   :dev, :file, :pages, :seq
   attr_accessor :ino, :size, :state, :refcnt
 
-  def initialize(file) 
+  def initialize(file)
     @file = file
     @seq  = @@seq
     @@seq = @@seq + 1
@@ -127,7 +127,7 @@ class CachedFile
       next unless yield(idx, len, state, refcnt)
       self.add_page_range idx, len
     end
-  end 
+  end
 
   def add_page_range(idx, len = 1)
     for i in idx...(idx+len)
@@ -138,7 +138,7 @@ class CachedFile
 
   def init_attrs(line = nil)
     if line
-      ino, size, cached, cachedp, state, 
+      ino, size, cached, cachedp, state,
         refcnt, dev, file = line.split
       @state  = state
       @refcnt = refcnt.to_i
@@ -151,8 +151,8 @@ class CachedFile
       @dev = stat.dev
     end
 
-    @ino     = stat.ino 
-    @size    = (stat.size + 1023) / 1024
+    @ino  = stat.ino
+    @size = (stat.size + 1023) / 1024
   end
 
   def cached
@@ -201,7 +201,7 @@ class CachedFile
   end
   alias - difference
 
-  def page_ranges 
+  def page_ranges
     list = []
     idx = 0;
     len = 0;
@@ -280,7 +280,7 @@ class CachedFileList
     @cfile_by_name.each_value do |cfile|
       cf = cfl[cfile.file]
       if cf != nil
-        cfile.difference cf 
+        cfile.difference cf
       end
     end
     self
@@ -318,9 +318,9 @@ class CachedFileList
       end
     else
       if File.stat(input).file?
-        cfl.restore_from_file input 
+        cfl.restore_from_file input
       else
-        cfl.restore_from_dir input 
+        cfl.restore_from_dir input
       end
     end
     cfl
@@ -334,7 +334,7 @@ class CachedFileList
 
     @cfile_by_name.each_value do |cfile|
       cfile.init_pages do |idx, len, state, refcnt|
-        eval condition 
+        eval condition
       end
     end
 
@@ -348,7 +348,7 @@ class CachedFileList
     filecache.syswrite('index')
     filecache.rewind
     filecache.each_line do |line|
-      next if line[0] == ?# 
+      next if line[0] == ?#
 
       dev, file = line.split.values_at(-2, -1)
       next if file == '(noname)'
@@ -381,7 +381,7 @@ class CachedFileList
 
       cfile = CachedFile.new file
       cfile.init_attrs line
-      @cfile_by_name[file] = cfile 
+      @cfile_by_name[file] = cfile
     end # filecache.each_line
   end
 
@@ -417,7 +417,7 @@ class CachedFileList
           @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
         elsif line =~ /^\d+\s+\d+/
           idx, len = line.split
-          cfile.add_page_range idx.to_i, len.to_i 
+          cfile.add_page_range idx.to_i, len.to_i
         end
 
       end # file.each_line
@@ -481,31 +481,31 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-u", "--union SRC", "the set union.") do |src|
-    $cfiles.union CachedFileList.restore(src) 
+    $cfiles.union CachedFileList.restore(src)
   end
 
   opts.on("-i", "--intersection SRC", "the set intersect between pre-snapshort and SRC.") do |src|
-    $cfiles.intersection CachedFileList.restore(src) 
+    $cfiles.intersection CachedFileList.restore(src)
   end
 
   opts.on("-f", "--difference SRC", "the set difference between pre-snapshort and SRC.") do |src|
-    $cfiles.difference CachedFileList.restore(src) 
+    $cfiles.difference CachedFileList.restore(src)
   end
 
   opts.on("-F", "--rdifference SRC", "the set difference between pre-snapshort and SRC.") do |src|
     $cfiles = CachedFileList.restore(src).difference $cfiles
   end
 
-  opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern| 
+  opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern|
     p = Regexp.new(pattern)
     $cfiles.delete_if { |f| p =~ f.file }
   end
 
-  opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition| 
+  opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition|
     $cfiles.delete_if { |f| eval condition }
   end
 
-  opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat| 
+  opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat|
 
     if not 'Ss016'.include? `runlevel`[2]
       puts 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
