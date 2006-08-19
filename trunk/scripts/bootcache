@@ -11,7 +11,7 @@ task_root="$CACHE_ROOT/$task"
 preload_root="$task_root/preload"
 defrag_root="$task_root/defrag"
 
-[ ! -d $task_root ] && mkdir -p $task_root
+[ ! -d "$task_root" ] && mkdir -p "$task_root"
 
 function print_help()
 {
@@ -20,14 +20,14 @@ function print_help()
 
 function rotate_snapshots()
 {
-    [ -e $1/snapshot2 ] && rm -fr $1/snapshot2
-    [ -e $1/snapshot1 ] && mv $1/snapshot1 $1/snapshot2
-    [ -e $1/snapshot0 ] && mv $1/snapshot0 $1/snapshot1
+    [ -e "$1/snapshot2" ] && rm -fr "$1/snapshot2"
+    [ -e "$1/snapshot1" ] && mv "$1/snapshot1" "$1/snapshot2"
+    [ -e "$1/snapshot0" ] && mv "$1/snapshot0" "$1/snapshot1"
 }
 
 function start()
 {
-    rotate_snapshots $task_root
+    rotate_snapshots "$task_root"
 
     $FILECACHE --snapshot --dump "$task_root/snapshot0/start"
 }
