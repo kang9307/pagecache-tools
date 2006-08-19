@@ -139,7 +139,7 @@ function do_defrag()
     # ok, someone insists on doing the defrag...
     if [ ! -d $defrag_root ]; then
         [ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
-        schedule_defrag
+        schedule_defrag || return
     fi
 
     # do poor man's defrag
