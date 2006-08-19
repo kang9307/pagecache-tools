@@ -506,12 +506,12 @@ opts = OptionParser.new do |opts|
       next if fstat.file?
 
       # skip opened files
-      File.open(f.file) do |f|
-        if not f.flock(File::LOCK_EX | File::LOCK_NB)
+      File.open(f.file) do |fd|
+        unless fd.flock(File::LOCK_EX | File::LOCK_NB)
           puts "skiping opened file #{f.file}" if $verbose >= 2
           next
         end
-        f.flock(File::LOCK_UN)
+        fd.flock(File::LOCK_UN)
       end
 
       # check habitat dir existence
