@@ -494,9 +494,9 @@ opts = OptionParser.new do |opts|
 
   opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat|
 
-    if not 'Ss016'.include? `runlevel`[2]
-      puts 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
-      if readline[0] != ?y then return end
+    unless 'Ss016'.include? `runlevel`[2]
+      print 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
+      if $stdin.readline[0] != ?y then exit end
     end
 
     mtab = FSTab.new '/etc/mtab'
@@ -514,20 +514,27 @@ opts = OptionParser.new do |opts|
         f.flock(File::LOCK_UN)
       end
 
+      # check habitat dir existence
+      hdir  = mtab[f.dev].mount_point + '/' + habitat
+      hfile = hdir + '/' + File.basename(f.file)
+      unless File.directory? hdir
+        $stderr.puts "#{hdir}/ do not exist"
+        exit 1
+      end
+
       # poor man's defrag ;-)
-      tmpfile = mtab[f.dev].mount_point + '/' + habitat + '/' + File.basename(f.file)
       begin
-        FileUtils.cp f.file, tmpfile, :preserve => true
-        tstat = File.lstat tmpfile
+        FileUtils.cp f.file, hfile, :preserve => true
+        tstat = File.lstat hfile
         raise "not in same filesystem" if fstat.dev != tstat.dev
         raise "file changed" if fstat.size != tstat.size or
                                 fstat.mode != tstat.mode or
                                 fstat.mtime != tstat.mtime
         FileUtils.rm f.file
-        FileUtils.ln tmpfile, f.file
-        FileUtils.rm tmpfile
+        FileUtils.ln hfile, f.file
+        FileUtils.rm hfile
       rescue Exception => msg
-        $stderr.puts "Failed to defrag file #{f.file} => #{tmpfile}: #{msg}."
+        $stderr.puts "Failed to defrag file #{f.file} => #{hfile}: #{msg}."
         exit 1
       end
     end
