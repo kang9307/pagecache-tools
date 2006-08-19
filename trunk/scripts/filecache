@@ -251,10 +251,10 @@ class CachedFileList
   def union(cfl)
     cfl.each do |cfile|
       cf = @cfile_by_name[cfile.file]
-      if cf == nil
-        @cfile_by_name[cfile.file] = cfile
-      else
+      if cf
         cf.union cfile
+      else
+        @cfile_by_name[cfile.file] = cfile
       end
     end
     self
@@ -264,10 +264,10 @@ class CachedFileList
   def intersection(cfl)
     @cfile_by_name.each_value do |cfile|
       cf = cfl[cfile.file]
-      if cf == nil
-        @cfile_by_name.delete cfile.file
-      else
+      if cf
         cfile.intersection cf
+      else
+        @cfile_by_name.delete cfile.file
       end
     end
     self
@@ -345,8 +345,8 @@ class CachedFileList
         # - transform file name from digital form to real ones
         dev = file.delete('(:)').hex
         fs  = @@fstab[dev]
-        if fs == nil
-          puts "unknown device file #{file}"
+        unless fs
+          puts "unknown device file #{file}" if $verbose >= 2
           next
         end
         file  = fs.device_file
@@ -356,7 +356,7 @@ class CachedFileList
         # - ignore dirs/symlinks
         dev = "0x#{dev[0,5].delete(':')}".hex
         fs = @@fstab[dev]
-        next if fs == nil
+        next unless fs
         file = fs.mount_point + file unless fs.mount_point == "/"
         next unless File.exist?(file)
         next unless File.lstat(file).file?
@@ -417,7 +417,7 @@ class CachedFileList
     @cfile_by_name.delete_if { |key, cfile| cfile.empty? }
     @cfile_by_name.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
       fs = @@fstab[cfile.dev]
-      next if fs == nil
+      next unless fs
       fds[cfile.dev] ||= File.open("#{dir}/#{File.basename fs.device_file}",
                                     File::CREAT | File::TRUNC | File::RDWR)
       fds[cfile.dev].printf("%s", cfile.to_s)
