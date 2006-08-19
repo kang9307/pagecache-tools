@@ -10,11 +10,14 @@
 
 PATH=/sbin:/bin
 
+CACHE_ROOT=/var/cache/bootcache
 .  /etc/default/bootcache
 
 case "$1" in
 	start)
-		[ "$PRELOAD_TASK" ] && bootcache preload $PRELOAD_TASK
+		if [ "$PRELOAD_TASK" -a -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ]
+			bootcache preload $PRELOAD_TASK
+		fi
 		;;
 	stop)
 		# No-op
