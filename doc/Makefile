@@ -7,7 +7,7 @@ clean:
 	rm $(MANPAGES)
 
 install: $(MANPAGES)
-	install -m 644 $< $(man8dir)/$@
+	install -m 644 $(MANPAGES) $(man8dir)
 
 uninstall:
 	-(cd $(man8dir); rm -f $(MANPAGES))
