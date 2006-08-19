@@ -1,0 +1,1473 @@
+--- linux-2.6.18-rc4.orig/include/linux/kernel.h
++++ linux-2.6.18-rc4/include/linux/kernel.h
+@@ -32,6 +32,7 @@ extern const char linux_banner[];
+ 
+ #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+ #define ALIGN(x,a) (((x)+(a)-1)&~((a)-1))
++#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+ #define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
+ #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
+ 
+--- linux-2.6.18-rc4.orig/include/linux/fs.h
++++ linux-2.6.18-rc4/include/linux/fs.h
+@@ -78,8 +78,9 @@ extern int dir_notify_enable;
+ #define READ 0
+ #define WRITE 1
+ #define READA 2		/* read-ahead  - don't block if no resources */
+-#define SWRITE 3	/* for ll_rw_block() - wait for buffer lock */
++#define WRITEA 3	/* write-ahead - don't block if no resources */
+ #define SPECIAL 4	/* For non-blockdevice requests in request queue */
++#define SWRITE 5	/* for ll_rw_block() - wait for buffer lock */
+ #define READ_SYNC	(READ | (1 << BIO_RW_SYNC))
+ #define WRITE_SYNC	(WRITE | (1 << BIO_RW_SYNC))
+ #define WRITE_BARRIER	((1 << BIO_RW) | (1 << BIO_RW_BARRIER))
+--- linux-2.6.18-rc4.orig/block/deadline-iosched.c
++++ linux-2.6.18-rc4/block/deadline-iosched.c
+@@ -18,7 +18,8 @@
+ /*
+  * See Documentation/block/deadline-iosched.txt
+  */
+-static const int read_expire = HZ / 2;  /* max time before a read is submitted. */
++static const int read_expire = HZ / 5;	/* max time before an _impending_ read is submitted. */
++static const int reada_expire = 100 * HZ;/* max time before a read-ahead is submitted. */
+ static const int write_expire = 5 * HZ; /* ditto for writes, these limits are SOFT! */
+ static const int writes_starved = 2;    /* max times reads can starve a write */
+ static const int fifo_batch = 16;       /* # of sequential requests treated as one
+@@ -29,6 +30,7 @@ static const int deadline_hash_shift = 5
+ #define DL_HASH_FN(sec)		(hash_long(DL_HASH_BLOCK((sec)), deadline_hash_shift))
+ #define DL_HASH_ENTRIES		(1 << deadline_hash_shift)
+ #define rq_hash_key(rq)		((rq)->sector + (rq)->nr_sectors)
++#define list_entry_fifo(ptr)	list_entry((ptr), struct deadline_rq, fifo)
+ #define ON_HASH(drq)		(!hlist_unhashed(&(drq)->hash))
+ 
+ struct deadline_data {
+@@ -54,7 +56,7 @@ struct deadline_data {
+ 	/*
+ 	 * settings that change how the i/o scheduler behaves
+ 	 */
+-	int fifo_expire[2];
++	int fifo_expire[4];
+ 	int fifo_batch;
+ 	int writes_starved;
+ 	int front_merges;
+@@ -260,6 +262,41 @@ deadline_find_first_drq(struct deadline_
+ }
+ 
+ /*
++ * set expire time (only used for reads) and add to fifo list
++ */
++static void
++deadline_add_drq_fifo(struct deadline_data *dd, struct request *rq)
++{
++	const int data_dir = rq_data_dir(rq);
++	struct deadline_rq *drq = RQ_DATA(rq);
++	struct list_head *ip; /* insert before me */
++	int expire;
++
++	expire = dd->fifo_expire[rq_data_rwa(rq)];
++	drq->expires = jiffies + expire;
++
++	/*
++	 * Scan forward/backward and insert.
++	 */
++	if (expire > dd->fifo_expire[READ]) {
++		list_for_each(ip, &dd->fifo_list[data_dir]) {
++			if (time_before(drq->expires,
++					list_entry_fifo(ip)->expires))
++				break;
++		}
++		list_add_tail(&drq->fifo, ip);
++	} else {
++		list_for_each_prev(ip, &dd->fifo_list[data_dir]) {
++			if (!time_before(drq->expires,
++					list_entry_fifo(ip)->expires))
++				break;
++		}
++		list_add(&drq->fifo, ip);
++	}
++
++}
++
++/*
+  * add drq to rbtree and fifo
+  */
+ static void
+@@ -268,20 +305,71 @@ deadline_add_request(struct request_queu
+ 	struct deadline_data *dd = q->elevator->elevator_data;
+ 	struct deadline_rq *drq = RQ_DATA(rq);
+ 
+-	const int data_dir = rq_data_dir(drq->request);
+-
+ 	deadline_add_drq_rb(dd, drq);
+-	/*
+-	 * set expire time (only used for reads) and add to fifo list
+-	 */
+-	drq->expires = jiffies + dd->fifo_expire[data_dir];
+-	list_add_tail(&drq->fifo, &dd->fifo_list[data_dir]);
++	deadline_add_drq_fifo(dd, rq);
+ 
+ 	if (rq_mergeable(rq))
+ 		deadline_add_drq_hash(dd, drq);
+ }
+ 
+ /*
++ * We have a pending read on @page,
++ * find the corresponding request of type READA,
++ * promote it to READ, and reschedule it.
++ */
++static int
++deadline_kick_page(struct request_queue *q, struct page *page)
++{
++	struct deadline_data *dd = q->elevator->elevator_data;
++	struct deadline_rq *drq;
++	struct request *rq;
++	struct list_head *pos;
++	struct bio_vec *bvec;
++	struct bio *bio;
++	int i;
++
++	list_for_each(pos, &dd->fifo_list[READ]) {
++		drq = list_entry_fifo(pos);
++		rq = drq->request;
++
++		if (!(rq->flags & (1 << BIO_RW_AHEAD)))
++			continue;
++
++		rq_for_each_bio(bio, rq) {
++#if 0 /* the gain from this optimazation may be limited for desktops */
++			if (bio_segments(bio) > 8) {
++				struct page *pg1 = __BVEC_START(bio)->bv_page;
++				struct page *pg2 = __BVEC_END(bio)->bv_page;
++
++				if (bio_segments(bio) == pg2->index - pg1->index &&
++						pg1->mapping == pg2->mapping) {
++					if (page->mapping == pg1->mapping &&
++						page->index >= pg1->index &&
++						page->index <= pg2->index)
++						goto found;
++					else
++						continue;
++				}
++			}
++#endif
++
++			bio_for_each_segment(bvec, bio, i) {
++				if (page == bvec->bv_page)
++					goto found;
++			}
++		}
++	}
++
++	return -1;
++
++found:
++	rq->flags &= ~(1 << BIO_RW_AHEAD);
++	list_del(&drq->fifo);
++	deadline_add_drq_fifo(dd, rq);
++	return 0;
++}
++
++/*
+  * remove rq from rbtree, fifo, and hash
+  */
+ static void deadline_remove_request(request_queue_t *q, struct request *rq)
+@@ -435,8 +523,6 @@ deadline_move_request(struct deadline_da
+ 	deadline_move_to_dispatch(dd, drq);
+ }
+ 
+-#define list_entry_fifo(ptr)	list_entry((ptr), struct deadline_rq, fifo)
+-
+ /*
+  * deadline_check_fifo returns 0 if there are no expired reads on the fifo,
+  * 1 otherwise. Requires !list_empty(&dd->fifo_list[data_dir])
+@@ -477,7 +563,7 @@ static int deadline_dispatch_requests(re
+ 	if (drq) {
+ 		/* we have a "next request" */
+ 		
+-		if (dd->last_sector != drq->request->sector)
++		if (dd->last_sector < drq->request->sector - 10*1024)
+ 			/* end the batch on a non sequential request */
+ 			dd->batching += dd->fifo_batch;
+ 		
+@@ -638,7 +724,9 @@ static void *deadline_init_queue(request
+ 	dd->sort_list[READ] = RB_ROOT;
+ 	dd->sort_list[WRITE] = RB_ROOT;
+ 	dd->fifo_expire[READ] = read_expire;
++	dd->fifo_expire[READA] = reada_expire;
+ 	dd->fifo_expire[WRITE] = write_expire;
++	dd->fifo_expire[WRITEA] = write_expire;
+ 	dd->writes_starved = writes_starved;
+ 	dd->front_merges = 1;
+ 	dd->fifo_batch = fifo_batch;
+@@ -707,6 +795,7 @@ static ssize_t __FUNC(elevator_t *e, cha
+ 	return deadline_var_show(__data, (page));			\
+ }
+ SHOW_FUNCTION(deadline_read_expire_show, dd->fifo_expire[READ], 1);
++SHOW_FUNCTION(deadline_reada_expire_show, dd->fifo_expire[READA], 1);
+ SHOW_FUNCTION(deadline_write_expire_show, dd->fifo_expire[WRITE], 1);
+ SHOW_FUNCTION(deadline_writes_starved_show, dd->writes_starved, 0);
+ SHOW_FUNCTION(deadline_front_merges_show, dd->front_merges, 0);
+@@ -730,6 +819,7 @@ static ssize_t __FUNC(elevator_t *e, con
+ 	return ret;							\
+ }
+ STORE_FUNCTION(deadline_read_expire_store, &dd->fifo_expire[READ], 0, INT_MAX, 1);
++STORE_FUNCTION(deadline_reada_expire_store, &dd->fifo_expire[READA], 0, INT_MAX, 1);
+ STORE_FUNCTION(deadline_write_expire_store, &dd->fifo_expire[WRITE], 0, INT_MAX, 1);
+ STORE_FUNCTION(deadline_writes_starved_store, &dd->writes_starved, INT_MIN, INT_MAX, 0);
+ STORE_FUNCTION(deadline_front_merges_store, &dd->front_merges, 0, 1, 0);
+@@ -742,6 +832,7 @@ STORE_FUNCTION(deadline_fifo_batch_store
+ 
+ static struct elv_fs_entry deadline_attrs[] = {
+ 	DD_ATTR(read_expire),
++	DD_ATTR(reada_expire),
+ 	DD_ATTR(write_expire),
+ 	DD_ATTR(writes_starved),
+ 	DD_ATTR(front_merges),
+@@ -756,6 +847,7 @@ static struct elevator_type iosched_dead
+ 		.elevator_merge_req_fn =	deadline_merged_requests,
+ 		.elevator_dispatch_fn =		deadline_dispatch_requests,
+ 		.elevator_add_req_fn =		deadline_add_request,
++		.elevator_kick_page_fn =	deadline_kick_page,
+ 		.elevator_queue_empty_fn =	deadline_queue_empty,
+ 		.elevator_former_req_fn =	deadline_former_request,
+ 		.elevator_latter_req_fn =	deadline_latter_request,
+--- linux-2.6.18-rc4.orig/include/linux/blkdev.h
++++ linux-2.6.18-rc4/include/linux/blkdev.h
+@@ -509,6 +509,7 @@ enum {
+ #define list_entry_rq(ptr)	list_entry((ptr), struct request, queuelist)
+ 
+ #define rq_data_dir(rq)		((rq)->flags & 1)
++#define rq_data_rwa(rq)		((rq)->flags & 3)
+ 
+ static inline int blk_queue_full(struct request_queue *q, int rw)
+ {
+--- linux-2.6.18-rc4.orig/fs/mpage.c
++++ linux-2.6.18-rc4/fs/mpage.c
+@@ -302,7 +302,7 @@ do_mpage_readpage(struct bio *bio, struc
+ 	 * This page will go to BIO.  Do we need to send this BIO off first?
+ 	 */
+ 	if (bio && (*last_block_in_bio != blocks[0] - 1))
+-		bio = mpage_bio_submit(READ, bio);
++		bio = mpage_bio_submit(READA, bio);
+ 
+ alloc_new:
+ 	if (bio == NULL) {
+@@ -315,12 +315,12 @@ alloc_new:
+ 
+ 	length = first_hole << blkbits;
+ 	if (bio_add_page(bio, page, length, 0) < length) {
+-		bio = mpage_bio_submit(READ, bio);
++		bio = mpage_bio_submit(READA, bio);
+ 		goto alloc_new;
+ 	}
+ 
+ 	if (buffer_boundary(map_bh) || (first_hole != blocks_per_page))
+-		bio = mpage_bio_submit(READ, bio);
++		bio = mpage_bio_submit(READA, bio);
+ 	else
+ 		*last_block_in_bio = blocks[blocks_per_page - 1];
+ out:
+@@ -328,7 +328,7 @@ out:
+ 
+ confused:
+ 	if (bio)
+-		bio = mpage_bio_submit(READ, bio);
++		bio = mpage_bio_submit(READA, bio);
+ 	if (!PageUptodate(page))
+ 	        block_read_full_page(page, get_block);
+ 	else
+@@ -416,7 +416,7 @@ mpage_readpages(struct address_space *ma
+ 	pagevec_lru_add(&lru_pvec);
+ 	BUG_ON(!list_empty(pages));
+ 	if (bio)
+-		mpage_bio_submit(READ, bio);
++		mpage_bio_submit(READA, bio);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(mpage_readpages);
+@@ -435,7 +435,7 @@ int mpage_readpage(struct page *page, ge
+ 	bio = do_mpage_readpage(bio, page, 1, &last_block_in_bio,
+ 			&map_bh, &first_logical_block, get_block);
+ 	if (bio)
+-		mpage_bio_submit(READ, bio);
++		mpage_bio_submit(READA, bio);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(mpage_readpage);
+--- linux-2.6.18-rc4.orig/mm/page_io.c
++++ linux-2.6.18-rc4/mm/page_io.c
+@@ -124,7 +124,7 @@ int swap_readpage(struct file *file, str
+ 		goto out;
+ 	}
+ 	count_vm_event(PSWPIN);
+-	submit_bio(READ, bio);
++	submit_bio(READA, bio);
+ out:
+ 	return ret;
+ }
+--- linux-2.6.18-rc4.orig/include/linux/elevator.h
++++ linux-2.6.18-rc4/include/linux/elevator.h
+@@ -20,6 +20,7 @@ typedef int (elevator_set_req_fn) (reque
+ typedef void (elevator_put_req_fn) (request_queue_t *, struct request *);
+ typedef void (elevator_activate_req_fn) (request_queue_t *, struct request *);
+ typedef void (elevator_deactivate_req_fn) (request_queue_t *, struct request *);
++typedef int (elevator_kick_page_fn) (request_queue_t *, struct page *);
+ 
+ typedef void *(elevator_init_fn) (request_queue_t *, elevator_t *);
+ typedef void (elevator_exit_fn) (elevator_t *);
+@@ -34,6 +35,7 @@ struct elevator_ops
+ 	elevator_add_req_fn *elevator_add_req_fn;
+ 	elevator_activate_req_fn *elevator_activate_req_fn;
+ 	elevator_deactivate_req_fn *elevator_deactivate_req_fn;
++	elevator_kick_page_fn *elevator_kick_page_fn;
+ 
+ 	elevator_queue_empty_fn *elevator_queue_empty_fn;
+ 	elevator_completed_req_fn *elevator_completed_req_fn;
+@@ -91,6 +93,7 @@ extern void elv_dispatch_sort(request_qu
+ extern void elv_add_request(request_queue_t *, struct request *, int, int);
+ extern void __elv_add_request(request_queue_t *, struct request *, int, int);
+ extern void elv_insert(request_queue_t *, struct request *, int);
++extern void elv_kick_page(request_queue_t *, struct page *);
+ extern int elv_merge(request_queue_t *, struct request **, struct bio *);
+ extern void elv_merge_requests(request_queue_t *, struct request *,
+ 			       struct request *);
+--- linux-2.6.18-rc4.orig/block/elevator.c
++++ linux-2.6.18-rc4/block/elevator.c
+@@ -471,6 +471,20 @@ void elv_add_request(request_queue_t *q,
+ 	spin_unlock_irqrestore(q->queue_lock, flags);
+ }
+ 
++void elv_kick_page(request_queue_t *q, struct page *page)
++{
++	/* yes, the loop device has NULL queue_lock */
++	if (!q || !q->queue_lock)
++		return;
++
++	spin_lock_irq(q->queue_lock);
++	if (page && q->elevator && q->elevator->ops &&
++		q->elevator->ops->elevator_kick_page_fn)
++		q->elevator->ops->elevator_kick_page_fn(q, page);
++	spin_unlock_irq(q->queue_lock);
++
++}
++
+ static inline struct request *__elv_next_request(request_queue_t *q)
+ {
+ 	struct request *rq;
+--- linux-2.6.18-rc4.orig/block/ll_rw_blk.c
++++ linux-2.6.18-rc4/block/ll_rw_blk.c
+@@ -1620,6 +1620,9 @@ static void blk_backing_dev_unplug(struc
+ {
+ 	request_queue_t *q = bdi->unplug_io_data;
+ 
++	if (IOPRIO_PRIO_CLASS(current->ioprio) != IOPRIO_CLASS_IDLE)
++		elv_kick_page(q, page);
++
+ 	/*
+ 	 * devices don't necessarily have an ->unplug_fn defined
+ 	 */
+--- linux-2.6.18-rc4.orig/fs/buffer.c
++++ linux-2.6.18-rc4/fs/buffer.c
+@@ -62,8 +62,9 @@ static int sync_buffer(void *word)
+ 
+ 	smp_mb();
+ 	bd = bh->b_bdev;
+-	if (bd)
+-		blk_run_address_space(bd->bd_inode->i_mapping);
++	if (bd && bd->bd_inode && bd->bd_inode->i_mapping)
++		blk_run_backing_dev(bd->bd_inode->i_mapping->backing_dev_info,
++					bh->b_page);
+ 	io_schedule();
+ 	return 0;
+ }
+--- linux-2.6.18-rc4.orig/include/linux/mm.h
++++ linux-2.6.18-rc4/include/linux/mm.h
+@@ -469,6 +469,7 @@ static inline unsigned long page_zonenum
+ 
+ struct zone;
+ extern struct zone *zone_table[];
++extern char *zone_names[];
+ 
+ static inline int page_zone_id(struct page *page)
+ {
+@@ -1057,12 +1058,8 @@ int in_gate_area_no_task(unsigned long a
+ /* /proc/<pid>/oom_adj set to -17 protects from the oom-killer */
+ #define OOM_DISABLE -17
+ 
+-int drop_caches_sysctl_handler(struct ctl_table *, int, struct file *,
+-					void __user *, size_t *, loff_t *);
+ unsigned long shrink_slab(unsigned long scanned, gfp_t gfp_mask,
+ 			unsigned long lru_pages);
+-void drop_pagecache(void);
+-void drop_slab(void);
+ 
+ #ifndef CONFIG_MMU
+ #define randomize_va_space 0
+--- linux-2.6.18-rc4.orig/mm/page_alloc.c
++++ linux-2.6.18-rc4/mm/page_alloc.c
+@@ -80,7 +80,7 @@ EXPORT_SYMBOL(totalram_pages);
+ struct zone *zone_table[1 << ZONETABLE_SHIFT] __read_mostly;
+ EXPORT_SYMBOL(zone_table);
+ 
+-static char *zone_names[MAX_NR_ZONES] = { "DMA", "DMA32", "Normal", "HighMem" };
++char *zone_names[MAX_NR_ZONES] = { "DMA", "DMA32", "Normal", "HighMem" };
+ int min_free_kbytes = 1024;
+ 
+ unsigned long __meminitdata nr_kernel_pages;
+--- linux-2.6.18-rc4.orig/fs/dcache.c
++++ linux-2.6.18-rc4/fs/dcache.c
+@@ -1431,7 +1431,10 @@ static char * __d_path( struct dentry *d
+ 
+ 		if (dentry == root && vfsmnt == rootmnt)
+ 			break;
+-		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
++		if (unlikely(!vfsmnt)) {
++			if (IS_ROOT(dentry))
++				break;
++		} else if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
+ 			/* Global root? */
+ 			spin_lock(&vfsmount_lock);
+ 			if (vfsmnt->mnt_parent == vfsmnt) {
+--- linux-2.6.18-rc4.orig/fs/seq_file.c
++++ linux-2.6.18-rc4/fs/seq_file.c
+@@ -13,6 +13,8 @@
+ #include <asm/uaccess.h>
+ #include <asm/page.h>
+ 
++#define SEQFILE_SHOW_FROM_NEXT	LONG_MAX
++
+ /**
+  *	seq_open -	initialize sequential file
+  *	@file: file we initialize
+@@ -93,6 +95,7 @@ ssize_t seq_read(struct file *file, char
+ 	/* if not empty - flush it first */
+ 	if (m->count) {
+ 		n = min(m->count, size);
++		BUG_ON(m->from == SEQFILE_SHOW_FROM_NEXT);
+ 		err = copy_to_user(buf, m->buf + m->from, n);
+ 		if (err)
+ 			goto Efault;
+@@ -102,7 +105,7 @@ ssize_t seq_read(struct file *file, char
+ 		buf += n;
+ 		copied += n;
+ 		if (!m->count)
+-			m->index++;
++			m->from = SEQFILE_SHOW_FROM_NEXT;
+ 		if (!size)
+ 			goto Done;
+ 	}
+@@ -113,9 +116,11 @@ ssize_t seq_read(struct file *file, char
+ 		err = PTR_ERR(p);
+ 		if (!p || IS_ERR(p))
+ 			break;
+-		err = m->op->show(m, p);
+-		if (err)
+-			break;
++		if (m->from != SEQFILE_SHOW_FROM_NEXT) {
++			err = m->op->show(m, p);
++			if (err)
++				break;
++		}
+ 		if (m->count < m->size)
+ 			goto Fill;
+ 		m->op->stop(m, p);
+@@ -156,7 +161,7 @@ Fill:
+ 	if (m->count)
+ 		m->from = n;
+ 	else
+-		pos++;
++		m->from = SEQFILE_SHOW_FROM_NEXT;
+ 	m->index = pos;
+ Done:
+ 	if (!copied)
+@@ -208,11 +213,9 @@ static int traverse(struct seq_file *m, 
+ 		}
+ 		pos += m->count;
+ 		m->count = 0;
+-		if (pos == offset) {
+-			m->index++;
+-			break;
+-		}
+ 		p = m->op->next(m, p, &m->index);
++		if (pos == offset)
++			break;
+ 	}
+ 	m->op->stop(m, p);
+ 	return error;
+--- linux-2.6.18-rc4.orig/Documentation/filesystems/proc.txt
++++ linux-2.6.18-rc4/Documentation/filesystems/proc.txt
+@@ -207,6 +207,7 @@ Table 1-3: Kernel info in /proc 
+  driver	     Various drivers grouped here, currently rtc (2.4)
+  execdomains Execdomains, related to security			(2.4)
+  fb	     Frame Buffer devices				(2.4)
++ filecache   Query/drop in-memory file cache
+  fs	     File system parameters, currently nfs/exports	(2.4)
+  ide         Directory containing info about the IDE subsystem 
+  interrupts  Interrupt usage                                   
+@@ -451,6 +452,88 @@ VmallocTotal: total size of vmalloc memo
+  VmallocUsed: amount of vmalloc area which is used
+ VmallocChunk: largest contigious block of vmalloc area which is free
+ 
++..............................................................................
++
++filecache:
++
++Provides access to the in-memory file cache.
++
++To list an index of all cached files:
++
++    echo -n index > /proc/filecache
++    cat /proc/filecache
++
++The output looks like:
++
++    # filecache 1.0
++    #      ino       size   cached cached%  state   refcnt  dev             file
++       1026334         91       92    100   --      66      03:02(hda2)     /lib/ld-2.3.6.so
++        233608       1242      972     78   --      66      03:02(hda2)     /lib/tls/libc-2.3.6.so
++         65203        651      476     73   --      1       03:02(hda2)     /bin/bash
++       1026445        261      160     61   --      10      03:02(hda2)     /lib/libncurses.so.5.5
++        235427         10       12    100   --      44      03:02(hda2)     /lib/tls/libdl-2.3.6.so
++
++FIELD	INTRO
++---------------------------------------------------------------------------
++ino	inode number
++size	inode size in KB
++cached	cached size in KB
++cached%	percent of file data cached
++state1	'-' clean; 'd' metadata dirty; 'D' data dirty
++state2	'-' unlocked; 'L' locked, normally indicates file being written out
++refcnt	file reference count, it's an in-kernel one, not exactly open count
++dev	major:minor numbers in hex, followed by a descriptive device name
++file	file path _inside_ the filesystem. There are several special names:
++	'(noname)':	the file name is not available
++	'(03:02)':	the file is a block device file of major:minor
++	'...(deleted)': the named file has been deleted from the disk
++
++To list the cached pages of a perticular file:
++
++    echo -n /bin/bash > /proc/filecache
++    cat /proc/filecache
++
++    # file /bin/bash
++    # flags R:referenced A:active U:uptodate D:dirty W:writeback M:mmap
++    # idx   len     state   refcnt
++    0       36      RAU__M  3
++    36      1       RAU__M  2
++    37      8       RAU__M  3
++    45      2       RAU___  1
++    47      6       RAU__M  3
++    53      3       RAU__M  2
++    56      2       RAU__M  3
++
++FIELD	INTRO
++----------------------------------------------------------------------------
++idx	page index
++len	number of pages which are cached and share the same state
++state	page state of the flags listed in line two
++refcnt	page reference count
++
++Careful users may notice that the file name to be queried is remembered between
++commands. Internally, the module has a global variable to store the file name
++parameter, so that it can be inherited by newly opened /proc/filecache file.
++However it can lead to interference for multiple queriers. The solution here
++is to obey a rule: only root can interactively change the file name parameter;
++normal users must go for scripts to access the interface. Scripts should do it
++by following the code example below:
++
++    filecache = open("/proc/filecache", "rw");
++    # avoid polluting the global parameter filename
++    filecache.write("private session");
++
++To instruct the kernel to drop clean caches, dentries and inodes from memory,
++causing that memory to become free:
++
++    # drop clean file data cache (i.e. file backed pagecache)
++    echo drop data > /proc/filecache
++
++    # drop clean file metadata cache (i.e. dentries and inodes)
++    echo drop metadata > /proc/filecache
++
++Note that the drop commands are non-destructive operations and dirty objects
++are not freeable, the user should run `sync' first.
+ 
+ 1.3 IDE devices in /proc/ide
+ ----------------------------
+@@ -1302,22 +1385,6 @@ VM has token based thrashing control mec
+ unnecessary page faults in thrashing situation. The unit of the value is
+ second. The value would be useful to tune thrashing behavior.
+ 
+-drop_caches
+------------
+-
+-Writing to this will cause the kernel to drop clean caches, dentries and
+-inodes from memory, causing that memory to become free.
+-
+-To free pagecache:
+-	echo 1 > /proc/sys/vm/drop_caches
+-To free dentries and inodes:
+-	echo 2 > /proc/sys/vm/drop_caches
+-To free pagecache, dentries and inodes:
+-	echo 3 > /proc/sys/vm/drop_caches
+-
+-As this is a non-destructive operation and dirty objects are not freeable, the
+-user should run `sync' first.
+-
+ 
+ 2.5 /proc/sys/dev - Device specific parameters
+ ----------------------------------------------
+--- /dev/null
++++ linux-2.6.18-rc4/fs/proc/filecache.c
+@@ -0,0 +1,666 @@
++/*
++ * linux/fs/proc/filecache.c
++ *
++ * Copyright (C) 2006 Fengguang Wu <wfg@ustc.edu>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/fs.h>
++#include <linux/mm.h>
++#include <linux/radix-tree.h>
++#include <linux/page-flags.h>
++#include <linux/pagevec.h>
++#include <linux/pagemap.h>
++#include <linux/vmalloc.h>
++#include <linux/writeback.h>
++#include <linux/proc_fs.h>
++#include <linux/seq_file.h>
++#include <linux/module.h>
++#include <asm/uaccess.h>
++
++/* Increase it whenever there are visible changes. */
++#define FILECACHE_VERSION	"1.0"
++
++/*
++ * Session management.
++ *
++ * Each opened /proc/filecache file is assiocated with a session object.
++ *
++ * session.query_file is the file whose cache info is to be queried.
++ * Its value determines what we get on read():
++ * 	- NULL: call inode_index_*() to show the index of cached inodes
++ * 	- filp: call page_ranges_*() to show the cached pages of filp
++ *
++ * session.query_file is
++ * 	- initialized from global_name on open();
++ * 	- updated on write("filename");
++ * 	  note that the new filename will also be saved in global_name if
++ * 	  session.private_session is false.
++ */
++
++struct session {
++	int		private_session;
++	struct file	*query_file;
++	struct inode	**ordered_inodes;
++	pgoff_t		next_offset;
++};
++
++static char name_index[] = "index";
++static char *global_name = name_index;
++
++int name_session(struct session *s, char *name)
++{
++	static DEFINE_MUTEX(mutex);
++	int ret = 0;
++
++	mutex_lock(&mutex);
++
++	/* close old file */
++	if (s->query_file) {
++		if ((ret = filp_close(s->query_file, NULL)))
++			goto out;
++		s->query_file = NULL;
++	}
++
++	if (!name)
++		goto out;
++
++	/* open the named file */
++	if (strcmp(name, name_index)) {
++		if (IS_ERR(s->query_file =
++				filp_open(name, O_RDONLY|O_LARGEFILE, 0))) {
++			ret = (int)s->query_file;
++			s->query_file = NULL;
++			goto out;
++		}
++	}
++
++	/* set @name as new global default */
++	if (!s->private_session && name != global_name) {
++		/* non-root users are not allowed to modify global_name */
++		if (current->uid) {
++			ret = -EACCES;
++			goto out;
++		}
++
++		if (global_name != name_index)
++			__putname(global_name);
++
++		if (!strcmp(name, name_index))
++			global_name = name_index;
++		else {
++			global_name = __getname();
++			if (global_name)
++				strcpy(global_name, name);
++			else {
++				global_name = name_index;
++				ret = -ENOMEM;
++			}
++		}
++	}
++
++out:
++	mutex_unlock(&mutex);
++
++	return ret;
++}
++
++/*
++ * Session address is stored in proc_file->f_ra.flags:
++ * we assume that there will be no readahead for proc_file.
++ */
++struct session *get_session(struct file *proc_file)
++{
++	return (struct session *)proc_file->f_ra.flags;
++}
++
++int new_session(struct file* proc_file)
++{
++	struct session *s;
++
++	s = kmalloc(sizeof(*s), GFP_KERNEL);
++	if (!s)
++		return -ENOMEM;
++
++	BUG_ON(proc_file->f_ra.flags);
++	proc_file->f_ra.flags = (unsigned long)s;
++
++	memset(s, 0, sizeof(*s));
++	return name_session(s, global_name);
++}
++
++int kill_session(struct file *proc_file)
++{
++	struct session *s = get_session(proc_file);
++	int ret;
++
++	if (!(ret = name_session(s, NULL)))
++		kfree(s);
++
++	return ret;
++}
++
++
++/*
++ * Listing of cached files.
++ *
++ * Usage:
++ * 		echo -n index > /proc/filecache
++ * 		cat /proc/filecache
++ */
++
++static int may_show_inode(struct inode *inode)
++{
++	if (!inode)
++		return 0;
++
++	if (!inode->i_data.nrpages && !inode->i_mapping->nrpages)
++		return 0;
++
++	if (!current->uid)
++		return 1;
++
++	/* FIXME
++	 * The permission() call fails for device files, which
++	 * forces me to add this line of workaround - but why?
++	 */
++	if (S_ISBLK(inode->i_mode))
++		return 1;
++
++	return !permission(inode, MAY_READ, NULL);
++}
++
++static void show_inode(struct seq_file *m, struct inode *inode)
++{
++	char state[] = "--"; /* dirty, locked */
++	struct dentry *dentry;
++	loff_t size = i_size_read(inode);
++	unsigned long nrpages = inode->i_mapping->nrpages;
++	int percent;
++	int refcnt;
++	int shift;
++
++	if (!size)
++		return;
++
++	for (shift = 0; (size >> shift) > ULONG_MAX / 128; shift += 12)
++		;
++	percent = min(100UL, (((100 * nrpages) >> shift) << PAGE_CACHE_SHIFT) /
++						(unsigned long)(size >> shift));
++
++	if (inode->i_state & (I_DIRTY_DATASYNC|I_DIRTY_PAGES))
++		state[0] = 'D';
++	else if (inode->i_state & I_DIRTY_SYNC)
++		state[0] = 'd';
++
++	if (inode->i_state & I_LOCK)
++		state[0] = 'L';
++
++	refcnt = 0;
++	list_for_each_entry(dentry, &inode->i_dentry, d_alias) {
++		refcnt += atomic_read(&dentry->d_count);
++	}
++
++	seq_printf(m, "%10lu %10llu %8lu %6d\t%s\t%d\t%02x:%02x(%s)\t",
++			inode->i_ino,
++			DIV_ROUND_UP(size, 1024),
++			nrpages << (PAGE_CACHE_SHIFT - 10),
++			percent,
++			state,
++			refcnt,
++			MAJOR(inode->i_sb->s_dev),
++			MINOR(inode->i_sb->s_dev),
++			inode->i_sb->s_id);
++
++	if (list_empty(&inode->i_dentry)) {
++		if (!atomic_read(&inode->i_count))
++			seq_puts(m, "(noname)\n");
++		else
++			seq_printf(m, "(%02x:%02x)\n",
++					imajor(inode), iminor(inode));
++	} else {
++		dentry = list_entry(inode->i_dentry.next,
++							struct dentry, d_alias);
++		seq_path(m, NULL, dentry, " \t\n\\");
++		seq_putc(m, '\n');
++	}
++}
++
++static int inode_index_show(struct seq_file *m, void *v)
++{
++	unsigned long index = *(loff_t *) v;
++	struct session *s = m->private;
++        struct inode *inode;
++
++	if (index == 0) {
++		seq_puts(m, "# filecache " FILECACHE_VERSION "\n");
++		seq_puts(m, "#      ino       size   cached cached%"
++				"\tstate\trefcnt\tdev\t\tfile\n");
++	}
++
++	BUG_ON(!s->ordered_inodes);
++        inode = s->ordered_inodes[index];
++
++	if (may_show_inode(inode))
++		show_inode(m, inode);
++
++	return 0;
++}
++
++static void *inode_index_start(struct seq_file *m, loff_t *pos)
++{
++	struct session *s = m->private;
++	struct super_block *sb;
++	struct inode *inode;
++	struct inode **ip;
++	unsigned long n;
++
++alloc:
++	n = inodes_stat.nr_inodes + 100;
++	ip = s->ordered_inodes = vmalloc(n * sizeof(*ip));
++	if (!s->ordered_inodes)
++		return NULL;
++	memset(ip, 0, n * sizeof(*ip));
++
++	spin_lock(&inode_lock);
++
++	if (inodes_stat.nr_inodes > n) {
++		spin_unlock(&inode_lock);
++		vfree(ip);
++		goto alloc;
++	}
++
++	/*
++	 * Retrieve the inodes in order - newest one at bottom.
++	 */
++
++	list_for_each_entry_reverse(inode, &inode_unused, i_list) {
++		*ip++ = inode;
++	}
++
++	list_for_each_entry_reverse(inode, &inode_in_use, i_list) {
++		*ip++ = inode;
++	}
++
++	spin_lock(&sb_lock);
++	list_for_each_entry(sb, &super_blocks, s_list) {
++		list_for_each_entry_reverse(inode, &sb->s_dirty, i_list) {
++			*ip++ = inode;
++		}
++		list_for_each_entry_reverse(inode, &sb->s_io, i_list) {
++			*ip++ = inode;
++		}
++	}
++	spin_unlock(&sb_lock);
++
++	return *pos < inodes_stat.nr_inodes ? pos : NULL;
++}
++
++static void *inode_index_next(struct seq_file *m, void *v, loff_t *pos)
++{
++	(*pos)++;
++
++	return *pos < inodes_stat.nr_inodes ? pos : NULL;
++}
++
++static void inode_index_stop(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++
++	spin_unlock(&inode_lock);
++	vfree(s->ordered_inodes);
++}
++
++
++/*
++ * Listing of cached page ranges of a file.
++ *
++ * Usage:
++ * 		echo -n 'file name' > /proc/filecache
++ * 		cat /proc/filecache
++ */
++
++unsigned long page_mask;
++#define PG_MMAP		PG_lru	/* reuse this never-relevant flag */
++#define PG_COUNT	(sizeof(page_flag)/sizeof(page_flag[0]))
++
++/*
++ * Page state names, prefixed by their abbreviations.
++ */
++struct {
++	unsigned long	mask;
++	const char     *name;
++} page_flag [] = {
++	{1 << PG_referenced,	"R:referenced"},
++	{1 << PG_active,	"A:active"},
++
++	{1 << PG_uptodate,	"U:uptodate"},
++	{1 << PG_dirty,		"D:dirty"},
++	{1 << PG_writeback,	"W:writeback"},
++
++	{1 << PG_MMAP,		"M:mmap"},
++
++};
++
++static unsigned long page_flags(struct page* page)
++{
++	unsigned long flags;
++
++	flags = page->flags & page_mask;
++
++	if (page_mapped(page))
++		flags |= (1UL << PG_MMAP);
++
++	return flags;
++}
++
++static int pages_similiar(struct page* page0, struct page* page)
++{
++	if (page_count(page0) != page_count(page))
++		return 0;
++
++	if (page_flags(page0) != page_flags(page))
++		return 0;
++
++	return 1;
++}
++
++static void show_range(struct seq_file *m, struct page* page, unsigned long len)
++{
++	int i;
++	unsigned long flags;
++
++	if (!m || !page)
++		return;
++
++	seq_printf(m, "%lu\t%lu\t", page->index, len);
++
++	flags = page_flags(page);
++	for (i = 0; i < PG_COUNT; i++)
++		seq_putc(m, (flags & page_flag[i].mask) ?
++					page_flag[i].name[0] : '_');
++
++	seq_printf(m, "\t%d\n", page_count(page));
++}
++
++#define MAX_LINES	100
++static pgoff_t show_file_cache(struct seq_file *m,
++				struct address_space *mapping, pgoff_t start)
++{
++	int i;
++	int lines = 0;
++	pgoff_t len = 0;
++	struct pagevec pvec;
++	struct page *page;
++	struct page *page0 = NULL;
++
++	for (;;) {
++		pagevec_init(&pvec, 0);
++		pvec.nr = radix_tree_gang_lookup(&mapping->page_tree,
++				(void **)pvec.pages, start + len, PAGEVEC_SIZE);
++
++		if (pvec.nr == 0) {
++			show_range(m, page0, len);
++			start = ULONG_MAX;
++			goto out;
++		}
++
++		if (!page0)
++			page0 = pvec.pages[0];
++
++		for (i = 0; i < pvec.nr; i++) {
++			page = pvec.pages[i];
++
++			if (page->index == start + len &&
++					pages_similiar(page0, page))
++				len++;
++			else {
++				show_range(m, page0, len);
++				page0 = page;
++				start = page->index;
++				len = 1;
++				if (++lines > MAX_LINES)
++					goto out;
++			}
++		}
++	}
++
++out:
++	return start;
++}
++
++static int page_ranges_show(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++	pgoff_t offset;
++
++	if (!file)
++		return inode_index_show(m, v);
++
++	offset = *(loff_t *) v;
++
++	if (!offset) { /* print header */
++		int i;
++
++		seq_puts(m, "# file ");
++		seq_path(m, file->f_vfsmnt, file->f_dentry, " \t\n\\");
++
++		seq_puts(m, "\n# flags");
++		for (i = 0; i < PG_COUNT; i++)
++			seq_printf(m, " %s", page_flag[i].name);
++
++		seq_puts(m, "\n# idx\tlen\tstate\trefcnt\n");
++	}
++
++	s->next_offset = show_file_cache(m, file->f_mapping, offset);
++
++	return 0;
++}
++
++static int file_has_page(struct file *file, pgoff_t offset)
++{
++	loff_t size = i_size_read(file->f_mapping->host);
++	pgoff_t pages = DIV_ROUND_UP(size, PAGE_CACHE_SIZE);
++
++	return offset < pages;
++}
++
++static void *page_ranges_start(struct seq_file *m, loff_t *pos)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_start(m, pos);
++
++	read_lock_irq(&file->f_mapping->tree_lock);
++
++	return file_has_page(file, (pgoff_t)*pos) ? pos : NULL;
++}
++
++static void *page_ranges_next(struct seq_file *m, void *v, loff_t *pos)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_next(m, v, pos);
++
++	*pos = s->next_offset;
++	/* *pos = show_file_cache(NULL, file->f_mapping, *pos); */
++
++	return file_has_page(file, (pgoff_t)*pos) ? pos : NULL;
++}
++
++static void page_ranges_stop(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_stop(m, v);
++
++	read_unlock_irq(&file->f_mapping->tree_lock);
++}
++
++struct seq_operations seq_filecache_op = {
++	.start	= page_ranges_start,
++	.next	= page_ranges_next,
++	.stop	= page_ranges_stop,
++	.show	= page_ranges_show,
++};
++
++/*
++ * Implement the manual drop-all-pagecache function
++ */
++
++static void drop_pagecache_sb(struct super_block *sb)
++{
++	struct inode *inode;
++
++	spin_lock(&inode_lock);
++	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
++		if (inode->i_state & (I_FREEING|I_WILL_FREE))
++			continue;
++		invalidate_inode_pages(inode->i_mapping);
++	}
++	spin_unlock(&inode_lock);
++}
++
++void drop_pagecache(void)
++{
++	struct super_block *sb;
++
++	spin_lock(&sb_lock);
++restart:
++	list_for_each_entry(sb, &super_blocks, s_list) {
++		sb->s_count++;
++		spin_unlock(&sb_lock);
++		down_read(&sb->s_umount);
++		if (sb->s_root)
++			drop_pagecache_sb(sb);
++		up_read(&sb->s_umount);
++		spin_lock(&sb_lock);
++		if (__put_super_and_need_restart(sb))
++			goto restart;
++	}
++	spin_unlock(&sb_lock);
++}
++
++void drop_slab(void)
++{
++	int nr_objects;
++
++	do {
++		nr_objects = shrink_slab(1000, GFP_KERNEL, 1000);
++	} while (nr_objects > 10);
++}
++
++/*
++ * Proc file operations.
++ */
++
++static int filecache_open(struct inode *inode, struct file *proc_file)
++{
++	struct seq_file *m;
++	int ret;
++	if (!(ret = seq_open(proc_file, &seq_filecache_op))) {
++		ret = new_session(proc_file);
++		m = proc_file->private_data;
++		m->private = get_session(proc_file);
++	}
++	return ret;
++}
++
++static int filecache_release(struct inode *inode, struct file *proc_file)
++{
++	int ret;
++	if (!(ret = kill_session(proc_file)))
++		ret = seq_release(inode, proc_file);
++	return ret;
++}
++
++ssize_t filecache_write(struct file *proc_file, const char __user * buffer,
++			size_t count, loff_t *ppos)
++{
++	struct session *s;
++	char *name;
++	int e = 0;
++
++	if (count >= PATH_MAX)
++		return -ENAMETOOLONG;
++
++	name = kmalloc(count+1, GFP_KERNEL);
++	if (!name)
++		return -ENOMEM;
++
++	if (copy_from_user(name, buffer, count)) {
++		e = -EFAULT;
++		goto out;
++	}
++	name[count] = '\0';
++
++	if (!strncmp(name, "drop data", 9)) {
++		drop_pagecache();
++		goto out;
++	}
++
++	if (!strncmp(name, "drop metadata", 13)) {
++		drop_slab();
++		goto out;
++	}
++
++	s = get_session(proc_file);
++	if (!strcmp(name, "private session")) {
++		s->private_session = 1;
++		goto out;
++	}
++
++	e = name_session(s, name);
++
++out:
++	kfree(name);
++
++	return e ? e : count;
++}
++
++static struct file_operations proc_filecache_fops = {
++	.owner		= THIS_MODULE,
++	.open		= filecache_open,
++	.release	= filecache_release,
++	.write		= filecache_write,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++};
++
++
++static __init int filecache_init(void)
++{
++	int i;
++	struct proc_dir_entry *entry;
++
++	entry = create_proc_entry("filecache", 0600, NULL);
++	if (entry)
++		entry->proc_fops = &proc_filecache_fops;
++
++	/* Note: the faked flag PG_MMAP is not included. */
++	for (page_mask = i = 0; i < PG_COUNT - 1; i++)
++		page_mask |= page_flag[i].mask;
++
++	return 0;
++}
++
++static void filecache_exit(void)
++{
++	remove_proc_entry("filecache", NULL);
++}
++
++MODULE_AUTHOR("Fengguang Wu <wfg@ustc.edu>");
++MODULE_LICENSE("GPL");
++
++module_init(filecache_init);
++module_exit(filecache_exit);
+--- linux-2.6.18-rc4.orig/fs/Kconfig
++++ linux-2.6.18-rc4/fs/Kconfig
+@@ -901,6 +901,29 @@ config CONFIGFS_FS
+ 	  Both sysfs and configfs can and should exist together on the
+ 	  same system. One is not a replacement for the other.
+ 
++config PROC_FILECACHE
++	tristate "/proc/filecache support"
++	default m
++	depends on PROC_FS
++	help
++	  This option creates a file /proc/filecache which enables one to
++	  query/drop the cached files in memory.
++
++	  A quick start guide:
++
++	  # echo -n index > /proc/filecache
++	  # cat /proc/filecache
++
++	  # echo -n /bin/bash > /proc/filecache
++	  # cat /proc/filecache
++
++	  # echo drop data > /proc/filecache
++	  # echo drop metadata > /proc/filecache
++
++	  For more details, please check Documentation/filesystems/proc.txt .
++
++	  It can be a handy tool for sysadms and desktop users.
++
+ endmenu
+ 
+ menu "Miscellaneous filesystems"
+--- linux-2.6.18-rc4.orig/fs/proc/Makefile
++++ linux-2.6.18-rc4/fs/proc/Makefile
+@@ -13,3 +13,4 @@ proc-y       += inode.o root.o base.o ge
+ proc-$(CONFIG_PROC_KCORE)	+= kcore.o
+ proc-$(CONFIG_PROC_VMCORE)	+= vmcore.o
+ proc-$(CONFIG_PROC_DEVICETREE)	+= proc_devtree.o
++proc-$(CONFIG_PROC_FILECACHE)	+= filecache.o
+--- linux-2.6.18-rc4.orig/fs/Makefile
++++ linux-2.6.18-rc4/fs/Makefile
+@@ -10,7 +10,7 @@ obj-y :=	open.o read_write.o file_table.
+ 		ioctl.o readdir.o select.o fifo.o locks.o dcache.o inode.o \
+ 		attr.o bad_inode.o file.o filesystems.o namespace.o aio.o \
+ 		seq_file.o xattr.o libfs.o fs-writeback.o mpage.o direct-io.o \
+-		ioprio.o pnode.o drop_caches.o splice.o sync.o
++		ioprio.o pnode.o splice.o sync.o
+ 
+ obj-$(CONFIG_INOTIFY)		+= inotify.o
+ obj-$(CONFIG_INOTIFY_USER)	+= inotify_user.o
+--- linux-2.6.18-rc4.orig/include/linux/sysctl.h
++++ linux-2.6.18-rc4/include/linux/sysctl.h
+@@ -185,12 +185,11 @@ enum
+ 	VM_VFS_CACHE_PRESSURE=26, /* dcache/icache reclaim pressure */
+ 	VM_LEGACY_VA_LAYOUT=27, /* legacy/compatibility virtual address space layout */
+ 	VM_SWAP_TOKEN_TIMEOUT=28, /* default time for token time out */
+-	VM_DROP_PAGECACHE=29,	/* int: nuke lots of pagecache */
+-	VM_PERCPU_PAGELIST_FRACTION=30,/* int: fraction of pages in each percpu_pagelist */
+-	VM_ZONE_RECLAIM_MODE=31, /* reclaim local zone memory before going off node */
+-	VM_MIN_UNMAPPED=32,	/* Set min percent of unmapped pages */
+-	VM_PANIC_ON_OOM=33,	/* panic at out-of-memory */
+-	VM_VDSO_ENABLED=34,	/* map VDSO into new processes? */
++	VM_PERCPU_PAGELIST_FRACTION=29,/* int: fraction of pages in each percpu_pagelist */
++	VM_ZONE_RECLAIM_MODE=30, /* reclaim local zone memory before going off node */
++	VM_MIN_UNMAPPED=31,	/* Set min percent of unmapped pages */
++	VM_PANIC_ON_OOM=32,	/* panic at out-of-memory */
++	VM_VDSO_ENABLED=33,	/* map VDSO into new processes? */
+ };
+ 
+ 
+--- linux-2.6.18-rc4.orig/kernel/sysctl.c
++++ linux-2.6.18-rc4/kernel/sysctl.c
+@@ -70,7 +70,6 @@ extern int min_free_kbytes;
+ extern int printk_ratelimit_jiffies;
+ extern int printk_ratelimit_burst;
+ extern int pid_max_min, pid_max_max;
+-extern int sysctl_drop_caches;
+ extern int percpu_pagelist_fraction;
+ extern int compat_log;
+ 
+@@ -831,15 +830,6 @@ static ctl_table vm_table[] = {
+ 		.strategy	= &sysctl_intvec,
+ 	},
+ 	{
+-		.ctl_name	= VM_DROP_PAGECACHE,
+-		.procname	= "drop_caches",
+-		.data		= &sysctl_drop_caches,
+-		.maxlen		= sizeof(int),
+-		.mode		= 0644,
+-		.proc_handler	= drop_caches_sysctl_handler,
+-		.strategy	= &sysctl_intvec,
+-	},
+-	{
+ 		.ctl_name	= VM_MIN_FREE_KBYTES,
+ 		.procname	= "min_free_kbytes",
+ 		.data		= &min_free_kbytes,
+--- linux-2.6.18-rc4.orig/fs/drop_caches.c
++++ /dev/null
+@@ -1,68 +0,0 @@
+-/*
+- * Implement the manual drop-all-pagecache function
+- */
+-
+-#include <linux/kernel.h>
+-#include <linux/mm.h>
+-#include <linux/fs.h>
+-#include <linux/writeback.h>
+-#include <linux/sysctl.h>
+-#include <linux/gfp.h>
+-
+-/* A global variable is a bit ugly, but it keeps the code simple */
+-int sysctl_drop_caches;
+-
+-static void drop_pagecache_sb(struct super_block *sb)
+-{
+-	struct inode *inode;
+-
+-	spin_lock(&inode_lock);
+-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+-		if (inode->i_state & (I_FREEING|I_WILL_FREE))
+-			continue;
+-		invalidate_inode_pages(inode->i_mapping);
+-	}
+-	spin_unlock(&inode_lock);
+-}
+-
+-void drop_pagecache(void)
+-{
+-	struct super_block *sb;
+-
+-	spin_lock(&sb_lock);
+-restart:
+-	list_for_each_entry(sb, &super_blocks, s_list) {
+-		sb->s_count++;
+-		spin_unlock(&sb_lock);
+-		down_read(&sb->s_umount);
+-		if (sb->s_root)
+-			drop_pagecache_sb(sb);
+-		up_read(&sb->s_umount);
+-		spin_lock(&sb_lock);
+-		if (__put_super_and_need_restart(sb))
+-			goto restart;
+-	}
+-	spin_unlock(&sb_lock);
+-}
+-
+-void drop_slab(void)
+-{
+-	int nr_objects;
+-
+-	do {
+-		nr_objects = shrink_slab(1000, GFP_KERNEL, 1000);
+-	} while (nr_objects > 10);
+-}
+-
+-int drop_caches_sysctl_handler(ctl_table *table, int write,
+-	struct file *file, void __user *buffer, size_t *length, loff_t *ppos)
+-{
+-	proc_dointvec_minmax(table, write, file, buffer, length, ppos);
+-	if (write) {
+-		if (sysctl_drop_caches & 1)
+-			drop_pagecache();
+-		if (sysctl_drop_caches & 2)
+-			drop_slab();
+-	}
+-	return 0;
+-}
+--- linux-2.6.18-rc4.orig/Documentation/sysctl/vm.txt
++++ linux-2.6.18-rc4/Documentation/sysctl/vm.txt
+@@ -26,7 +26,6 @@ Currently, these files are in /proc/sys/
+ - min_free_kbytes
+ - laptop_mode
+ - block_dump
+-- drop-caches
+ - zone_reclaim_mode
+ - min_unmapped_ratio
+ - panic_on_oom
+@@ -35,7 +34,7 @@ Currently, these files are in /proc/sys/
+ 
+ dirty_ratio, dirty_background_ratio, dirty_expire_centisecs,
+ dirty_writeback_centisecs, vfs_cache_pressure, laptop_mode,
+-block_dump, swap_token_timeout, drop-caches:
++block_dump, swap_token_timeout:
+ 
+ See Documentation/filesystems/proc.txt
+ 
