@@ -36,7 +36,7 @@ function start()
 function stop()
 {
     # the boot task will have empty content for start
-    [ ! -d "$task_root/snapshot0/start" ] && mkdir "$task_root/snapshot0/start"
+    [ ! -d "$task_root/snapshot0/start" ] && mkdir -p "$task_root/snapshot0/start"
 
     $FILECACHE --snapshot --dump "$task_root/snapshot0/stop"
     $FILECACHE --load "$task_root/snapshot0/stop" \
