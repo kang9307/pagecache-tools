@@ -118,26 +118,26 @@ function do_defrag()
 {
     # prepare the defrag habitat dirs for each filesystem
     defrag_habitat=".defrag-habitat-$task"
-    while read devfile mp fstype options
+    while read dev mp fstype options
     do
-        dfrag_dir="$mp/$defrag_habitat"
+        defrag_dir="$mp/$defrag_habitat"
 
-        if [ -d $dfrag_dir ]; then continue; fi
-        if [ ! -b $devfile ]; then continue; fi
+        if [ -d "$defrag_dir" ]; then continue; fi
+        if [ ! -b "$dev" ];      then continue; fi
 
-        if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
+        if [ $fstype = 'ext2' -o $fstype = 'ext3' ]; then
             mount -o oldalloc,remount $mp
         fi
 
-        mkdir $dfrag_dir
+        mkdir "$defrag_dir"
 
-        if [ $fstype = "ext2" -o $fstype = "ext3" ]; then
+        if [ $fstype = 'ext2' -o $fstype = 'ext3' ]; then
             mount -o orlov,remount $mp
         fi
     done < /etc/mtab
 
     # ok, someone insists on doing the defrag...
-    if [ ! -d $defrag_root ]; then
+    if [ ! -d "$defrag_root" ]; then
         [ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
         schedule_defrag || return
     fi
