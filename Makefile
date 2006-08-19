@@ -6,7 +6,8 @@ install: src/readahead-fs
 	install -m 755 -s src/readahead-fs		${ROOT}/sbin/
 	install -m 755 scripts/bootcache		${ROOT}/sbin/
 	install -m 755 scripts/filecache		${ROOT}/usr/sbin/
-	install -m 755 scripts/bootcache.sh		${ROOT}/etc/init.d/
+	install -m 755 scripts/bootcache-preload.sh	${ROOT}/etc/init.d/
+	install -m 755 scripts/bootcache-timing.sh	${ROOT}/etc/init.d/
 	install -m 755 scripts/bootcache-defrag.sh	${ROOT}/etc/init.d/
 	install -m 644 etc/default/bootcache		${ROOT}/etc/default/
 	update-rc.d bootcache-preload.sh start 3 S .
@@ -18,7 +19,8 @@ uninstall:
 	rm -f ${ROOT}/sbin/readahead-fs
 	rm -f ${ROOT}/sbin/bootcache
 	rm -f ${ROOT}/usr/sbin/filecache
-	rm -f ${ROOT}/etc/init.d/bootcache.sh
+	rm -f ${ROOT}/etc/init.d/bootcache-preload.sh
+	rm -f ${ROOT}/etc/init.d/bootcache-timing.sh
 	rm -f ${ROOT}/etc/init.d/bootcache-defrag.sh
 	rm -f ${ROOT}/etc/default/bootcache
 	update-rc.d bootcache-preload.sh remove
