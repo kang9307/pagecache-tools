@@ -8,7 +8,7 @@
 # Short-Description: run scheduled defrag on reboot/shutdown time
 ### END INIT INFO
 
-PATH=/sbin:/bin
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
 CACHE_ROOT=/var/cache/bootcache
 .  /etc/default/bootcache
