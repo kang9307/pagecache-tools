@@ -89,7 +89,7 @@ function preload
     for dev in $devs
     do
         file="$preload_root/$dev"
-        [ ! -f file ] && continue
+        [ -f "$file" ] || continue
 
         (
             while true
@@ -99,7 +99,7 @@ function preload
                 sleep 1
             done
 
-            readahead-fs $1
+            readahead-fs "$file"
         )&
     done
 }
