@@ -11,7 +11,7 @@
 #              - log the sysv-init/desktop boot time
 ### END INIT INFO
 
-PATH=/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 CACHE_ROOT=/var/cache/bootcache
 .  /etc/default/bootcache
