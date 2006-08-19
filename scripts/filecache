@@ -449,7 +449,7 @@ opts = OptionParser.new do |opts|
 
 
   opts.on("-v", "--verbose [LEVEL]", "set level of verbosity") do |level|
-    $verbose = level || 1
+    $verbose = (level || 1).to_i
   end
 
   opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
