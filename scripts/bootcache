@@ -23,6 +23,7 @@ function rotate_snapshots()
     [ -e "$1/snapshot2" ] && rm -fr "$1/snapshot2"
     [ -e "$1/snapshot1" ] && mv "$1/snapshot1" "$1/snapshot2"
     [ -e "$1/snapshot0" ] && mv "$1/snapshot0" "$1/snapshot1"
+    mkdir -p "$1/snapshot0"
 }
 
 function start()
