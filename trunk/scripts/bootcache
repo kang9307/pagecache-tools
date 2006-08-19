@@ -110,7 +110,7 @@ function reset_queue
 
 function preload
 {
-    [ ! -d "$preload_root" ] && echo "$preload_root/ does not exist!" && return
+    [ ! -d "$preload_root" ] && echo "$preload_root/ does not exist!" && return 1
 
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
 
@@ -185,7 +185,7 @@ function do_defrag()
     else
         rm -fr "$defrag_root.err"
         mv "$defrag_root" "$defrag_root.err"
-        return
+        return 1
     fi
 
     # update the moved fs metadata
