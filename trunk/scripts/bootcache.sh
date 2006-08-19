@@ -1,10 +1,10 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          bootcache
-# Required-Start:    mountkernfs
+# Required-Start:    mountkernfs sendsigs
 # Required-Stop:
-# Default-Start:     S 2 3 4 5
-# Default-Stop:      0 6
+# Default-Start:     S 2 3 4 5  0 6
+# Default-Stop:
 # Short-Description: preload boot files on startup;
 #                    do scheduled defrag on reboot/shutdown;
 #                    log the sysv-init/desktop boot time
