@@ -65,7 +65,7 @@ FILE_SUFFIX	:= .c
 ## 在使用默认参数的情况下, 还可以使用下面的CFLAGS, LDFLAGS, DCFLAGS, DLDFLAGS
 ## 增加编译参数, 甚至覆盖. 默认为使用编译参数. 注意, 无论子项目里是否设定这个
 ## 参数，都使用父项目的这个参数的值.
-#DEFAULT_FLAGS	:= 0
+DEFAULT_FLAGS	:= 0
 
 ## 是否使用父项目的FLAGS. 默认使用
 #USE_PARENT_FLAGS := 0
