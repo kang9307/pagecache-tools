@@ -518,7 +518,7 @@ opts = OptionParser.new do |opts|
       hdir  = mtab[f.dev].mount_point + '/' + habitat
       hfile = hdir + '/' + File.basename(f.file)
       unless File.directory? hdir
-        $stderr.puts "#{hdir}/ do not exist"
+        $stderr.puts "defrag habitat directory #{hdir} do not exist"
         exit 1
       end
 
