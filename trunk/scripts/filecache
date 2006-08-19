@@ -1,4 +1,4 @@
-#!/usr/bin/ruby -wd
+#!/usr/bin/ruby -w
 
 $BDEV_ID = 0xFFFF0002
 $BDEV_NAME = 'bdev'
