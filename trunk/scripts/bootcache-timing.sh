@@ -65,23 +65,24 @@ function memory_above_any()
 
 function log_line()
 {
-	echo $@ >> $CACHE_ROOT/uptime
+	echo "$@" >> $CACHE_ROOT/uptime
 }
 
 function log_boot_time()
 {
 	[ -z "$UPTIME_LOG_TIMING" ] && return
 
+	log_line "PRELOAD_TASK=$PRELOAD_TASK DATE=`date` KERNEL=`uname -a`"
+
 	# sysv-init boot time
-	log_line "SYSV $(</proc/uptime) $PRELOAD_TASK \#  `date` `uname -a`"
+	log_line "SYSV $(</proc/uptime)"
 
 	(
 		# do the wait
 		eval $UPTIME_LOG_TIMING
 
 		# GUI desktop ready time
-		log_line "GUI  $(</proc/uptime) $PRELOAD_TASK"
-		log_line
+		log_line "GUI  $(</proc/uptime)"
 	)&
 }
 
