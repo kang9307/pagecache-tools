@@ -16,7 +16,7 @@ CACHE_ROOT=/var/cache/bootcache
 function check_do_defrag()
 {
 	# cannot handle task name with whitespace here
-	tasks=`cd $CACHE_ROOT; echo *`
+	tasks=`cd $CACHE_ROOT && echo *`
 	for task in $tasks
 	do
 		defrag_root="$CACHE_ROOT/$task/defrag"
