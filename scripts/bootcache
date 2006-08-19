@@ -48,31 +48,64 @@ function stop()
 function setup_queue
 {
     QUEUES=`echo /sys/block/*/queue`
-    for QUEUE in $QUEUES
+    ELEVATORS=
+    local deadline=no
+    for queue in $QUEUES
     do
-        echo deadline   >   $QUEUE/scheduler
-        echo 10240      >   $QUEUE/nr_requests
-        echo 4096       >   $QUEUE/max_sectors_kb
-        echo 10         >   $QUEUE/iosched/fifo_batch
-        echo 0          >   $QUEUE/iosched/read_expire
-        echo 120000     >   $QUEUE/iosched/reada_expire
-        echo 120000     >   $QUEUE/iosched/write_expire
-        echo 1000       >   $QUEUE/iosched/writes_starved
+        local elevators=$($queue/scheduler)
+        for elv in $elevators
+        do
+            case "$elv" in
+                '[noop]')
+                        oelv=noop
+                        ;;
+                '[cfq]')
+                        oelv=cfq
+                        ;;
+                'deadline')
+                        deadline=yes
+                        ;;
+                '[deadline]')
+                        deadline=yes
+                        oelv=deadline
+                        ;;
+                '[anticipatory]')
+                        oelv=anticipatory
+                        ;;
+            esac
+        done
+        ELEVATORS="$ELEVATORS $oelv"
+        [ $deadline = 'no' ] && modprobe deadline-iosched || return
+
+        echo deadline   >   $queue/scheduler
+        echo 10240      >   $queue/nr_requests
+        echo 4096       >   $queue/max_sectors_kb
+        echo 10         >   $queue/iosched/fifo_batch
+        echo 0          >   $queue/iosched/read_expire
+        echo 120000     >   $queue/iosched/reada_expire
+        echo 120000     >   $queue/iosched/write_expire
+        echo 1000       >   $queue/iosched/writes_starved
         echo 10         >   /proc/sys/vm/vfs_cache_pressure
     done
 }
 
 function reset_queue
 {
-    QUEUES=`echo /sys/block/*/queue`
-    for QUEUE in $QUEUES
+    for queue in $QUEUES
     do
-        echo 128        >   $QUEUE/nr_requests
-        echo 100        >   $QUEUE/iosched/read_expire
-        echo 3000       >   $QUEUE/iosched/write_expire
-        echo 500        >   $QUEUE/iosched/writes_starved
+        elv=$1
+        shift
+        if [ -z "$elv" ]; then
+            return
+        elif [ $elv != 'deadline' ]; then
+            echo $elv > $queue/scheduler
+        else
+            echo 100  > $queue/iosched/read_expire
+            echo 3000 > $queue/iosched/write_expire
+            echo 500  > $queue/iosched/writes_starved
+        fi
+        echo 128  > $queue/nr_requests
     done
-
 }
 
 function preload
@@ -180,7 +213,7 @@ case "$1" in
         setup_queue
         preload
         wait_for_process_stop readahead-fs
-        reset_queue
+        reset_queue $ELEVATORS
         ;;
     defrag)
         schedule_defrag
