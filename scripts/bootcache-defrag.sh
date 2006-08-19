@@ -18,8 +18,8 @@ function check_do_defrag()
 	tasks=`cd $CACHE_ROOT; echo *`
 	for task in $tasks
 	do
-		dfrag_root="$CACHE_ROOT/$task/defrag"
-		if [ -d $defrag_root ]; then
+		defrag_root="$CACHE_ROOT/$task/defrag"
+		if [ -d "$defrag_root" ]; then
 			bootcache defrag-now $task
 		fi
 	done
