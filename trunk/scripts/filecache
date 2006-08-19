@@ -381,6 +381,7 @@ class CachedFileList
       end
     else
       $stderr.puts "#{@path} not a file or directory."
+      exit 1
     end
     self
   end
