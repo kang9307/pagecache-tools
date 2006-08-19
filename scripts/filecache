@@ -503,7 +503,7 @@ opts = OptionParser.new do |opts|
     $cfiles.each do |f|
       # skip obscure files
       fstat = File.lstat f.file
-      next if fstat.file?
+      next unless fstat.file?
 
       # skip opened files
       File.open(f.file) do |fd|
