@@ -1,5 +1,9 @@
 # bootcache configuration file
 
+##
+## Required parameters
+##
+
 # In case your /var is a standalone partition that cannot be accessed in early
 # boot time, change it to a directory that resides in the root partition.
 CACHE_ROOT=/var/cache/bootcache
@@ -7,17 +11,36 @@ CACHE_ROOT=/var/cache/bootcache
 # Verbose level
 VERBOSE=0
 
+
+##
+## Optional features
+##
+## unset the vars below to disable the corresponding features
+##
+
 # Preload the 'boot' task files to speedup linux boot process.
-# To disable it, comment it out.
 PRELOAD_TASK=boot
 
-# When to log boot/startup time?
-# Specify a list of commands for waiting on the ready of usable desktop;
-# as soon as the commands terminate, the current time will be logged into
-# $CACHE_ROOT/uptime.  You can comment it out to disable boot time logging.
+# The timing commands for boot time logging.
+#
+# The list of commands should wait for a usable desktop; as soon as they
+# terminate, the current time will be logged into $CACHE_ROOT/uptime.
+# This helps us measure your startup time improvement ;-)
+#
+# a useful builtin function:
+#
+# 	wait_for_process <process> [start] [stop]
+# 		start - wait for the named process to appear
+# 		stop  - wait for the named process to quit
 BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
 
-# When to take a new snapshot of the /proc/filecache?
-# Please specify a list of waiting commands.
-# Disable auto-snapshoting by commenting it out.
+# The timing commands for cache footprint snapshoting.
+#
+# When they terminate, a new snapshot of the /proc/filecache will be saved.
+#
+# a useful builtin function:
+#
+# 	memory_above_any [xx%] [yyyM]
+# 		xx%  - percent of total memory, never be > 95%
+# 		yyyM - the absolute value of megabyte
 CACHE_SNAPSHOT_WAITCMD='memory_above_any 90% 500M'
