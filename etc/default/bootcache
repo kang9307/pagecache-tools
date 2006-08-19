@@ -20,4 +20,4 @@ BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
 # When to take a new snapshot of the /proc/filecache?
 # Please specify a list of waiting commands.
 # Disable auto-snapshoting by commenting it out.
-CACHE_SNAPSHOT_WAITCMD='memory_above_any 80% 500M'
+CACHE_SNAPSHOT_WAITCMD='memory_above_any 90% 500M'
