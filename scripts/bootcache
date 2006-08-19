@@ -4,7 +4,7 @@ VERBOSE=0
 CACHE_ROOT=/var/cache/bootcache
 . /etc/default/bootcache
 
-FILECACHE=filecache
+FILECACHE="filecache --verbose $VERBOSE"
 
 task=${2:-boot}
 task_root="$CACHE_ROOT/$task"
