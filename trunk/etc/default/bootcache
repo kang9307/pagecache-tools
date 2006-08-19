@@ -32,7 +32,7 @@ PRELOAD_TASK=boot
 # 	wait_for_process <process> [start] [stop]
 # 		start - wait for the named process to appear
 # 		stop  - wait for the named process to quit
-BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
+UPTIME_LOG_TIMING='wait_for_process ksplash start stop'
 
 # The timing commands for cache footprint snapshoting.
 #
@@ -43,4 +43,4 @@ BOOTTIME_LOG_WAITCMD='wait_for_process ksplash start stop'
 # 	memory_above_any [xx%] [yyyM]
 # 		xx%  - percent of total memory, never be > 95%
 # 		yyyM - the absolute value of megabyte
-CACHE_SNAPSHOT_WAITCMD='memory_above_any 90% 500M'
+CACHE_SNAPSHOT_TIMING='memory_above_any 90% 500M'

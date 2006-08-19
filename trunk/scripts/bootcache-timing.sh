@@ -70,14 +70,14 @@ function log_line()
 
 function log_boot_time()
 {
-	[ -z "$BOOTTIME_LOG_WAITCMD" ] && return
+	[ -z "$UPTIME_LOG_TIMING" ] && return
 
 	# sysv-init boot time
 	log_line "SYSV $(</proc/uptime) $PRELOAD_TASK \#  `date` `uname -a`"
 
 	(
 		# do the wait
-		eval $BOOTTIME_LOG_WAITCMD
+		eval $UPTIME_LOG_TIMING
 
 		# GUI desktop ready time
 		log_line "GUI  $(</proc/uptime) $PRELOAD_TASK"
@@ -87,11 +87,11 @@ function log_boot_time()
 
 function take_filecache_snapshot()
 {
-	[ -z "$CACHE_SNAPSHOT_WAITCMD" ] && return
+	[ -z "$CACHE_SNAPSHOT_TIMING" ] && return
 
 	(
 		# do the wait
-		eval $CACHE_SNAPSHOT_WAITCMD
+		eval $CACHE_SNAPSHOT_TIMING
 
 		# take a snapshot of /proc/filecache
 		bootcache stop boot
