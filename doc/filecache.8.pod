@@ -1,6 +1,6 @@
 =head1 NAME
 
-filecache - page cache tool for fast system boot/application startup
+filecache - tool for /proc/filecache
 
 =head1 SYNOPSIS
 
@@ -10,31 +10,44 @@ B<filecache> [options]
 
 B<filecache> operates on an ordered set of cached files.
 
+=over 8
+
+=item data importing: B<--snapshot>, B<--load>
+
+=item data exporting: B<--dump>
+
+=item set operations: B<--union>, B<--intersection>, B<--difference>, B<--rdifference>
+
+=item data filtering: B<--prune-path>, B<--delete-if>
+
+=item data actions:   B<--defrag>
+
+=back
+
 =head1 OPTIONS
 
 Available options:
 
 =over 4
 
-=item B<-v>, B<--verbose> I<[LEVEL]>
+=item B<-v>, B<--verbose> [I<LEVEL>]
 
 set level of verbosity
 
-=item B<-s>, B<--snapshot> I<[CONDITION]>
+=item B<-s>, B<--snapshot> [I<CONDITION>]
 
-take a snapshot of I</proc/filecache> with pages satisfy the CONDITION.
-CONDITION is a piece of ruby code that returns C<true>/C<false>.
-avaiable fields:
+take a snapshot of I</proc/filecache>, accept only the pages satisfy I<CONDITION>.
+I<CONDITION> is a piece of ruby code that returns C<true>/C<false>. Avaiable fields:
 
 =over 4
 
-=item B<idx>
+=item * B<idx>
 
-=item B<len>
+=item * B<len>
 
-=item B<state>
+=item * B<state>
 
-=item B<refcnt>
+=item * B<refcnt>
 
 =back
 
@@ -58,37 +71,35 @@ dump the snapshot to the I<DST> dir.
 
 =item        B<--delete-if> I<CONDITION>
 
-delete files satisfying I<CONDITION>.
-available fields:
+delete files satisfying I<CONDITION>.  Available fields:
 
 =over 4
 
-=item B<f.dev>
+=item * B<f.dev>
 
-=item B<f.file>
+=item * B<f.file>
 
-=item B<f.pages>
+=item * B<f.pages>
 
-=item B<f.seq>
+=item * B<f.seq>
 
-=item B<f.ino>
+=item * B<f.ino>
 
-=item B<f.size>            file size in KB
+=item * B<f.size>            file size in KB
 
-=item B<f.cached>          cached size in KB
+=item * B<f.cached>          cached size in KB
 
-=item B<f.cached_percent>
+=item * B<f.cached_percent>
 
-=item B<f.state>           R:referenced A:active U:uptodate D:dirty W:writeback M:mmap
+=item * B<f.state>           R:referenced A:active U:uptodate D:dirty W:writeback M:mmap
 
-=item B<f.refcnt>
+=item * B<f.refcnt>
 
-=item B<f.blockdev?>
+=item * B<f.blockdev?>
 
-=item B<f.empty?>
+=item * B<f.empty?>
 
 =back
-
 
 =item        B<--defrag> I<HABITAT>
 
@@ -102,12 +113,11 @@ do poor man's defrag via dir I<HABITAT>.
 
 =over 4
 
+=item F<{dstdir}/bdev>
 
-=item B<{dstdir}/bdev>
+=item F<{dstdir}/{devname}>
 
-=item B<{dstdir}/{devname}>
-
-=item B<{dstdir}/{nfspath}>
+=item F<{dstdir}/{nfspath}>
 
 =back
 
@@ -115,7 +125,14 @@ do poor man's defrag via dir I<HABITAT>.
 
 To save a copy of the current cache contents:
 
-   filecache --snapshot --dump /tmp/`date +'%F'`/
+   filecache --snapshot --dump /tmp/cache
+
+To do some filtering on it:
+
+   filecache --load /tmp/cache/         \
+             --delete-if 'f.size > 200' \
+             --prune-path '^/bin/'      \
+             --dump /tmp/cache/
 
 =head1 SEE ALSO
 
