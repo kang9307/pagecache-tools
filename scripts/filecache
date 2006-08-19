@@ -370,10 +370,9 @@ class CachedFileList
 
   # Load the pre-saved snapshot of /proc/filecache from a file or dir
   def load(path)
-    case File.stat(path).ftype
-    when 'file'
+    if File.file? path
       load_file path
-    when 'directory'
+    elsif File.directory? path
       Dir.foreach(path) do |file|
         file = "#{path}/#{file}"
         next unless File.stat(file).file?
