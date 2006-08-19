@@ -1,19 +1,20 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          bootcache
-# Required-Start:    mountkernfs sendsigs
+# Provides:          bootcache-timing
+# Required-Start:    rmnologin
 # Required-Stop:
-# Default-Start:     S 2 3 4 5  0 6
+# Default-Start:     2 3 4 5
 # Default-Stop:
-# Short-Description: preload boot files on startup;
-#                    do scheduled defrag on reboot/shutdown;
-#                    log the sysv-init/desktop boot time
+# Short-Description: run bootcache tasks when boot completed
+# Description:
+#              - take /proc/filecache snapshot;
+#              - log the sysv-init/desktop boot time
 ### END INIT INFO
+
+PATH=/sbin:/bin
 
 CACHE_ROOT=/var/cache/bootcache
 .  /etc/default/bootcache
-
-PATH=/sbin:/bin
 
 function wait_for_process_start()
 {
@@ -84,7 +85,7 @@ function log_boot_time()
 	)&
 }
 
-function auto_filecache_snapshot()
+function take_filecache_snapshot()
 {
 	[ -z "$CACHE_SNAPSHOT_WAITCMD" ] && return
 
@@ -96,35 +97,17 @@ function auto_filecache_snapshot()
 		bootcache stop boot
 	)&
 }
-	
-function check_do_defrag()
-{
-	tasks=`cd $CACHE_ROOT; echo *`
-	for task in $tasks
-	do
-		dfrag_root="$CACHE_ROOT/$task/defrag"
-		if [ -d $defrag_root ]; then
-			bootcache defrag-now $task
-		fi
-	done
-}
 
 case "$1" in
 	start)
-		if [ "$RUNLEVEL" = "S" -a "$PREVLEVEL" = "N" ]; then
-			[ "$PRELOAD_TASK" ] && bootcache preload $PRELOAD_TASK
-		else
-			log_boot_time
-			auto_filecache_snapshot
-		fi
+		log_boot_time
+		take_filecache_snapshot
 		;;
 	stop)
-		if [ "$RUNLEVEL" = "0" -o "$RUNLEVEL" = "6" ]; then
-			check_do_defrag
-		fi
+		# No-op
 		;;
 	*)
-		echo "Usage: $0 start|stop" >&2
+		echo "Usage: $0 start" >&2
 		exit 3
 		;;
 esac
