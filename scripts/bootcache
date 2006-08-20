@@ -95,7 +95,7 @@ function setup_queue
         echo 120000     >   $queue/iosched/reada_expire
         echo 120000     >   $queue/iosched/write_expire
         echo 1000       >   $queue/iosched/writes_starved
-        echo 10         >   /proc/sys/vm/vfs_cache_pressure
+        echo 0          >   /proc/sys/vm/vfs_cache_pressure
     done
 }
 
@@ -115,6 +115,7 @@ function reset_queue
             echo 500  > $queue/iosched/writes_starved
         fi
         echo 128  > $queue/nr_requests
+        echo 50   > /proc/sys/vm/vfs_cache_pressure
     done
 }
 
