@@ -73,8 +73,10 @@ reada_fetch_one_item (struct ReadA* ra, char** item)
   char* e;
 
 
-  if (item == NULL || reada_fill_buf (ra) == -1)
+  if (item == NULL || reada_fill_buf (ra) == -1) {
+	  /* fprintf(stderr, "null item or initial reada_fill_buf error, maybe EOF hit\n"); */
       return -1;
+  }
 
   *item = 0;
 
@@ -87,8 +89,10 @@ reada_fetch_one_item (struct ReadA* ra, char** item)
 
           if (e == NULL)
             {
-              if (ra->pos == 0)
+              if (ra->pos == 0) {
+		      fprintf(stderr, "BUFSIZE too small\n");
                   return -1; /* BUFSIZE is to small ? */
+	      }
 
               /* need more data from file */
 
@@ -102,8 +106,10 @@ reada_fetch_one_item (struct ReadA* ra, char** item)
 
               ra->pos = ret;
 
-              if (reada_fill_buf (ra) == -1)
+              if (reada_fill_buf (ra) == -1) {
+		      fprintf(stderr, "reada_fill_buf error\n");
                   return -1;
+	      }
 
               p = ra->buf + ra->pos;
 
