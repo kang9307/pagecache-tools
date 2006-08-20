@@ -187,13 +187,10 @@ function do_defrag()
                 --defrag "$defrag_habitat"
 
     # cleanup the defrag root, or bootcache.sh will call us again and again!
-    if [ $? -eq 0 ]; then
-        rm -fr "$defrag_root"
-    else
-        rm -fr "$defrag_root.err"
-        mv "$defrag_root" "$defrag_root.err"
-        return 1
-    fi
+    local retval=$?
+    rm -fr "$defrag_root.old"
+    mv "$defrag_root" "$defrag_root.old"
+    [ $retval -eq 0 ] || return 1
 
     # update the moved fs metadata
     # it will include old metadata from the deleted inodes
