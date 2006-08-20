@@ -122,12 +122,11 @@ function do_preload
 
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
 
-    devs=`cd "$PRELOAD_ROOT"; echo *`
-    devs=${devs/bdev}
-
     readahead-fs "$PRELOAD_ROOT/bdev" &
 
-    for dev in $devs
+    local devs=`cd "$PRELOAD_ROOT"; echo *`
+
+    for dev in ${devs/bdev}
     do
         file="$PRELOAD_ROOT/$dev"
         [ -f "$file" ] || continue
