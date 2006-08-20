@@ -81,9 +81,9 @@ function setup_queue
                         ;;
             esac
         done
-        ELEVATORS="$ELEVATORS $oelv"
         [ $deadline = 'yes' ] || modprobe deadline-iosched || return
 
+        ELEVATORS="$ELEVATORS $oelv"
         echo deadline   >   $queue/scheduler
         echo 10240      >   $queue/nr_requests
         echo 4096       >   $queue/max_sectors_kb
