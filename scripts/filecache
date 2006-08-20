@@ -420,6 +420,14 @@ opts = OptionParser.new do |opts|
     $verbose = (level || 1).to_i
   end
 
+  opts.on('-q', '--query [FILE]',
+                'query cached pages of FILE in /proc/filecache.') do |file|
+    filecache = CachedFile.filecache
+    filecache.syswrite(file || 'index')
+    filecache.rewind
+    filecache.each_line { |line| puts line }
+  end
+
   opts.on('-s', '--snapshot [CONDITION]',
     'load from /proc/filecache filtering pages with CONDITION.') do |condition|
     $cfiles.snapshot(condition || 'true')
