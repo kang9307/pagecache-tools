@@ -176,19 +176,16 @@ class CachedFile
     @pages.update cfile.pages
     self
   end
-  alias + union
 
   def intersection(cfile)
     @pages.delete_if { |k, v| not cfile.pages.include?(k) }
     self
   end
-  alias & intersection
 
   def difference(cfile)
     @pages.delete_if { |k, v| cfile.pages.include?(k) }
     self
   end
-  alias - difference
 
   def page_ranges
     list = []
@@ -250,7 +247,6 @@ class CachedFileList
     end
     self
   end
-  alias + union
 
   def intersection(cfl)
     @cfile_by_name.each_value do |cfile|
@@ -263,7 +259,6 @@ class CachedFileList
     end
     self
   end
-  alias & intersection
 
   def difference(cfl)
     @cfile_by_name.each_value do |cfile|
@@ -274,7 +269,6 @@ class CachedFileList
     end
     self
   end
-  alias - difference
 
   def each
     @cfile_by_name.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
