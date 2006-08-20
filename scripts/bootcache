@@ -154,9 +154,6 @@ function schedule_defrag()
 {
     $FILECACHE --load "$PRELOAD_ROOT" \
                     --delete-if 'f.size > 200' \
-                    --prune-path '^/bin/' \
-                    --prune-path '^/lib/lib' \
-                    --prune-path '^/lib/lsb/lib' \
                     --dump "$DEFRAG_ROOT"
 }
 
