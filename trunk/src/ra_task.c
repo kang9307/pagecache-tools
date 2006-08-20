@@ -16,11 +16,11 @@ ra_task_pages (char* p, struct RA_pages** pages)
   *pages = NULL;
   cur    = NULL;
   e      = p;
-  
+
   while (e != NULL)
     {
       e = strchr (p, '\n');
-      
+
       if (e != NULL)
           *e = 0;
 
@@ -53,7 +53,7 @@ ra_task_pages (char* p, struct RA_pages** pages)
   return 0;
 }
 
-void 
+void
 ra_task_print (struct RA_task* task)
 {
   struct RA_pages* cur = task->pages;
@@ -127,34 +127,23 @@ do_ra_task (struct RA_task* task)
 
   pages = task->pages;
 
-  while (1)
-    {
       fd = open(task->filename, O_RDONLY | O_LARGEFILE);
       if (fd == -1) {
           perror(task->filename);
-          break;
+          return;
       }
 
       while (pages != NULL)
         {
-          ret    = readahead(fd, pages->offset, pages->len); 
+          ret    = readahead(fd, pages->offset, pages->len);
 
           if (ret == -1)
             {
-              if (errno == EINTR)
-                  continue;
-              else
-                {
                   perror(task->filename);
                   break;
-                }
             }
           pages = pages->next;
         }
-
-      if (pages == NULL || errno != EBADF)
-          break;
-    }
 
   close(fd);
 }
