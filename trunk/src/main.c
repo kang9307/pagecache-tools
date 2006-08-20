@@ -30,13 +30,18 @@ extern int sys_ioprio_get(int, int);
 _syscall3(int, ioprio_set, int, which, int, who, int, ioprio);
 _syscall2(int, ioprio_get, int, which, int, who);
 
-enum {
-        IOPRIO_CLASS_IDLE = 3,
-};      
-        
+enum {  
+        IOPRIO_CLASS_NONE,
+        IOPRIO_CLASS_RT,
+        IOPRIO_CLASS_BE,
+        IOPRIO_CLASS_IDLE,
+};
+
 enum {  
         IOPRIO_WHO_PROCESS = 1,
-}; 
+        IOPRIO_WHO_PGRP,
+        IOPRIO_WHO_USER,
+};
 
 #define IOPRIO_CLASS_SHIFT      13
 
