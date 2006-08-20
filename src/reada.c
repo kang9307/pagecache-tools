@@ -29,7 +29,7 @@ reada_fill_buf (struct ReadA* ra)
 
   while (ra->buf[ra->pos] == 0)
     {
-      ret = read (ra->fd, ra->buf + ra->pos, BUFSIZ- ra->pos - 1); 
+      ret = read (ra->fd, ra->buf + ra->pos, BUFSIZE - ra->pos - 1); 
 
       if (ret == -1)
         {
@@ -88,7 +88,7 @@ reada_fetch_one_item (struct ReadA* ra, char** item)
           if (e == NULL)
             {
               if (ra->pos == 0)
-                  return -1; /* BUFSIZ is to small ? */
+                  return -1; /* BUFSIZE is to small ? */
 
               /* need more data from file */
 

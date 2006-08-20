@@ -12,12 +12,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#define BUFSIZE (10*BUFSIZ)
+
 struct ReadA
 {
   char*                 input;   /* 保存预读任务文件的名称  */
   int                   fd;
   size_t                offset;
-  char                  buf[BUFSIZ];
+  char                  buf[BUFSIZE];
   size_t                len;
   size_t                pos;
   // char*                 partition;
