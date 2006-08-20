@@ -11,8 +11,6 @@ task_root="$CACHE_ROOT/$task"
 preload_root="$task_root/preload"
 defrag_root="$task_root/defrag"
 
-[ ! -d "$task_root" ] && mkdir -p "$task_root"
-
 function print_help()
 {
     echo "Usage: $0 start|stop|preload|defrag|defrag-now [task]"
