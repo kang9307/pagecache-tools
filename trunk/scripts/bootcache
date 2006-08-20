@@ -80,7 +80,9 @@ function setup_queue
                         ;;
             esac
         done
-        [ $deadline = 'yes' ] || modprobe deadline-iosched || return
+        
+        [ $deadline = 'yes' ] || modprobe deadline-iosched ||
+            { echo "deadline elevator is required for preloading"; exit 1; }
 
         ELEVATORS="$ELEVATORS $oelv"
         echo deadline   >   $queue/scheduler
