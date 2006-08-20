@@ -1,5 +1,7 @@
 #!/usr/bin/ruby -w
 
+GC.disable # this gains us 0.2 second
+
 $BDEV_ID = 0xFFFF0002
 $BDEV_NAME = 'bdev'
 
