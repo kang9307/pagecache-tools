@@ -10,10 +10,11 @@ task=${2:-boot}
 task_root="$CACHE_ROOT/$task"
 preload_root="$task_root/preload"
 defrag_root="$task_root/defrag"
+defrag_habitat=".defrag-habitat-$task"
 
 function print_help()
 {
-    echo "Usage: $0 start|stop|preload|defrag|defrag-now [task]"
+    echo "Usage: $0 start|stop|preload|defrag|defrag-now|clear [task]"
 }
 
 function rotate_snapshots()
@@ -152,16 +153,23 @@ function schedule_defrag()
                     --dump "$defrag_root"
 }
 
-function do_defrag()
+function defrag_habitat_dir()
 {
-    # prepare the defrag habitat dirs for each filesystem
-    defrag_habitat=".defrag-habitat-$task"
     while read dev mp fstype options
     do
-        defrag_dir="$mp/$defrag_habitat"
+        local defrag_dir="$mp/$defrag_habitat"
 
-        if [ -d "$defrag_dir" ]; then continue; fi
-        if [ ! -b "$dev" ];      then continue; fi
+        [ -b "$dev" ] || continue
+
+        # clear task dirs?
+        if [ $1 = 'rmdir' ]; then
+            [ -d "$defrag_dir" ] && rmdir "$defrag_dir"
+            continue
+        fi
+
+        # defrag habitat dirs should be
+        # consistent/persistent - created once, reuse afterwards
+        [ -d "$defrag_dir" ] && continue
 
         if [ $fstype = 'ext2' -o $fstype = 'ext3' ]; then
             mount -o oldalloc,remount $mp
@@ -173,6 +181,12 @@ function do_defrag()
             mount -o orlov,remount $mp
         fi
     done < /etc/mtab
+}
+
+function do_defrag()
+{
+    # prepare the defrag habitat dirs for each filesystem
+    defrag_habitat_dir mkdir
 
     # ok, someone insists on doing the defrag...
     if [ ! -d "$defrag_root" ]; then
@@ -197,6 +211,12 @@ function do_defrag()
                 --delete-if 'not f.blockdev?' \
                 --union "$preload_root/bdev" \
                 --dump "$preload_root"
+}
+
+function do_clear()
+{
+    rm -fr "$task_root"
+    defrag_habitat_dir rmdir
 }
 
 function wait_for_process_stop()
@@ -228,6 +248,9 @@ case "$1" in
         ;;
     defrag-now)
         do_defrag
+        ;;
+    clear)
+        do_clear
         ;;
     *)
         print_help
