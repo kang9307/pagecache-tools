@@ -111,7 +111,7 @@ class CachedFile
     @file = file
     @seq  = @@seq
     @@seq = @@seq + 1
-    @pages = []
+    @pages = Hash.new
   end
 
   def init_pages
@@ -129,7 +129,7 @@ class CachedFile
 
   def add_page_range(idx, len = 1)
     for i in idx...(idx+len)
-      @pages << i
+      @pages[i] = i
     end
     self
   end
@@ -176,24 +176,19 @@ class CachedFile
   end
 
   def union(cfile)
-    @pages.concat cfile.pages
-    @pages.uniq!
+    @pages.update cfile.pages
     self
   end
   alias + union
 
   def intersection(cfile)
-    @pages.delete_if do |page|
-      !cfile.pages.include?(page)
-    end
+    @pages.delete_if { |k, v| not cfile.pages.include?(k) }
     self
   end
   alias & intersection
 
   def difference(cfile)
-    @pages.delete_if do |page|
-      cfile.pages.include?(page)
-    end
+    @pages.delete_if { |k, v| cfile.pages.include?(k) }
     self
   end
   alias - difference
@@ -203,15 +198,14 @@ class CachedFile
     idx = 0;
     len = 0;
 
-    @pages.sort!
-    @pages.each do |page|
-      if idx + len == page
+    @pages.keys.sort.each do |offset|
+      if idx + len == offset
         len = len + 1
       else
         if len > 0
           list << [idx, len]
         end
-        idx = page
+        idx = offset
         len = 1
       end
     end
