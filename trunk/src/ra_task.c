@@ -143,6 +143,9 @@ do_ra_task (struct RA_task* task)
                   break;
             }
           pages = pages->next;
+
+	  printf(".");
+	  fflush(stdout);
         }
 
   close(fd);
