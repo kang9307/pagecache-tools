@@ -127,6 +127,8 @@ function do_preload
 
     readahead-fs -t 1 "$PRELOAD_ROOT/bdev" &
 
+    until pidof udevd > /dev/null; do sleep 1; done
+
     local devs=`cd "$PRELOAD_ROOT"; echo *`
 
     for dev in ${devs/bdev}
