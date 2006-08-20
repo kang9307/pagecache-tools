@@ -15,7 +15,7 @@ defrag_root="$task_root/defrag"
 
 function print_help()
 {
-    echo "Usage: $0 start/stop/preload/defrag/defrag-now <task>"
+    echo "Usage: $0 start|stop|preload|defrag|defrag-now [task]"
 }
 
 function rotate_snapshots()
@@ -36,7 +36,7 @@ function start()
 function stop()
 {
     # the boot task will not be calling start
-    if [ -d "$task_root/snapshot0/stop" ]; then   
+    if [ -d "$task_root/snapshot0/stop" ]; then
         rotate_snapshots "$task_root"
     fi
 
