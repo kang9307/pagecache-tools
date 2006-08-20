@@ -328,11 +328,12 @@ class CachedFileList
 
       dev, file = line.split.values_at(-2, -1)
       next if file == '(noname)'
-      next if file =~ /\(deleted\)$/
-      file.gsub! '\011', "\011"  # ht
-      file.gsub! '\012', "\012"  # nl
-      file.gsub! '\040', "\040"  # sp
-      file.gsub! '\\',   "\\"    # \
+      if file.include? ?\\
+        file.gsub! '\011', "\011"  # ht
+        file.gsub! '\012', "\012"  # nl
+        file.gsub! '\040', "\040"  # sp
+        file.gsub! '\\',   "\\"    # \
+      end
 
       if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
         # handle block device
