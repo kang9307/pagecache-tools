@@ -382,7 +382,7 @@ class CachedFileList
       line.chomp!
       if line[0] == ?/
         cfile = CachedFile.new line
-        next unless File.exist?(line) # sorry for creating cfile just to abandon it :(
+        next unless File.exist?(line) # sorry for the creat and abandon fuss
         cfile.init_attrs
         @cfile_by_name[cfile.file] = cfile if @@fstab[cfile.dev]
       elsif line =~ /^\d+\s+\d+/
@@ -435,11 +435,13 @@ opts = OptionParser.new do |opts|
     $verbose = (level || 1).to_i
   end
 
-  opts.on("-s", "--snapshot [CONDITION]", "take snapshot of /proc/filecache with pages satisfy the CONDITION.") do |condition|
+  opts.on("-s", "--snapshot [CONDITION]",
+    "load from /proc/filecache filtering pages with CONDITION.") do |condition|
     $cfiles.snapshot(condition || 'true')
   end
 
-  opts.on("-l", "--load SRC", "load the pre-saved snapshot from SRC file/dir.") do |src|
+  opts.on("-l", "--load SRC",
+                "load the pre-saved snapshot from SRC file/dir.") do |src|
     $cfiles.load src
   end
 
@@ -452,15 +454,18 @@ opts = OptionParser.new do |opts|
     $cfiles.union CachedFileList.new.load(src)
   end
 
-  opts.on("-i", "--intersection SRC", "the set intersect between pre-snapshort and SRC.") do |src|
+  opts.on("-i", "--intersection SRC",
+                "the set intersect between pre-snapshort and SRC.") do |src|
     $cfiles.intersection CachedFileList.new.load(src)
   end
 
-  opts.on("-f", "--difference SRC", "the set difference between pre-snapshort and SRC.") do |src|
+  opts.on("-f", "--difference SRC",
+                "the set difference between pre-snapshort and SRC.") do |src|
     $cfiles.difference CachedFileList.new.load(src)
   end
 
-  opts.on("-F", "--rdifference SRC", "the set difference between pre-snapshort and SRC.") do |src|
+  opts.on("-F", "--rdifference SRC",
+                "the set difference between pre-snapshort and SRC.") do |src|
     c = CachedFileList.new.load(src)
     c.difference $cfiles
     $cfiles = c
@@ -478,8 +483,9 @@ opts = OptionParser.new do |opts|
   opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat|
 
     unless 'Ss016'.include? `runlevel`[2]
-      print 'WARNING: defraging in multi-user mode may lead to data corruption. Continue anyway? [y/N]'
-      if $stdin.readline[0] != ?y then exit end
+      print 'WARNING: defraging in multi-user mode may lead to data corruption.'
+      print 'Continue anyway? [y/N]'
+      exit if $stdin.readline[0] != ?y
     end
 
     mtab = FSTab.new '/etc/mtab'
