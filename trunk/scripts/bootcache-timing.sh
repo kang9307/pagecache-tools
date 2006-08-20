@@ -104,11 +104,11 @@ case "$1" in
 		log_boot_time
 		take_filecache_snapshot
 		;;
-	stop)
+	stop|'')
 		# No-op
 		;;
 	*)
-		echo "Usage: $0 start" >&2
+		echo "Usage: $0 [start|stop]" >&2
 		exit 3
 		;;
 esac
