@@ -25,14 +25,14 @@ function rotate_snapshots()
     mkdir -p "$1/snapshot0"
 }
 
-function start()
+function do_start()
 {
     rotate_snapshots "$TASK_ROOT"
 
     $FILECACHE --snapshot --dump "$TASK_ROOT/snapshot0/start"
 }
 
-function stop()
+function do_stop()
 {
     # the boot task will not be calling start
     if [ -d "$TASK_ROOT/snapshot0/stop" ]; then
@@ -114,7 +114,7 @@ function reset_queue
     done
 }
 
-function preload
+function do_preload
 {
     [ -d "$PRELOAD_ROOT" ] || { echo "no preload data for task '$TASK'"; Return 1; }
 
@@ -226,15 +226,15 @@ function wait_for_process_stop()
 
 case "$1" in
     start)
-        start
+        do_start
         ;;
     stop)
-        stop
+        do_stop
         ;;
     preload)
         trap "reset_queue; exit" EXIT HUP INT ABRT QUIT SEGV TERM
         setup_queue
-        preload
+        do_preload
         wait_for_process_stop readahead-fs
         reset_queue $ELEVATORS
         ;;
