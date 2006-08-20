@@ -18,7 +18,7 @@ case "$1" in
 		[ -n "$PRELOAD_TASK" ] || exit 0
 		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
 
-		bootcache preload $PRELOAD_TASK
+		bootcache preload $PRELOAD_TASK &
 		;;
 	stop)
 		# No-op
