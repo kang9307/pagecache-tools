@@ -353,8 +353,7 @@ class CachedFileList
         fs = @@fstab[dev]
         next unless fs
         file = fs.mount_point + file unless fs.mount_point == "/"
-        next unless File.exist?(file)
-        next unless File.lstat(file).file?
+        next unless File.file?(file)
       end
 
       cfile = CachedFile.new file
