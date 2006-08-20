@@ -211,12 +211,9 @@ class CachedFile
   end
 
   def to_s
-    list = page_ranges
-
     s = "#{@file}\n"
-    list.each { |span| s << "#{span[0]}\t#{span[1]}\n" }
+    page_ranges.each { |span| s << "#{span[0]}\t#{span[1]}\n" }
     s = s + "\n"
-
   end
 
 end
