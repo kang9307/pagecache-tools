@@ -125,7 +125,7 @@ function do_preload
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
     [ -x /usr/bin/ionice ] && /usr/bin/ionice -c3 -p$$
 
-    readahead-fs "$PRELOAD_ROOT/bdev" &
+    readahead-fs -t 1 "$PRELOAD_ROOT/bdev" &
 
     local devs=`cd "$PRELOAD_ROOT"; echo *`
 
@@ -142,7 +142,7 @@ function do_preload
                 sleep 1
             done
 
-            readahead-fs "$file"
+            readahead-fs -t 50 "$file"
         )&
     done
 }
