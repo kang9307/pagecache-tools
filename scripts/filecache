@@ -172,18 +172,21 @@ class CachedFile
     @pages.empty?
   end
 
-  def union(cfile)
-    @pages.update cfile.pages
+  # a = a | b
+  def union(b)
+    @pages.update b.pages
     self
   end
 
-  def intersection(cfile)
-    @pages.delete_if { |k, v| not cfile.pages.include?(k) }
+  # a = a & b
+  def intersection(b)
+    @pages.delete_if { |k, v| not b.pages.include?(k) }
     self
   end
 
-  def difference(cfile)
-    @pages.delete_if { |k, v| cfile.pages.include?(k) }
+  # a = a - b
+  def difference(b)
+    @pages.delete_if { |k, v| b.pages.include?(k) }
     self
   end
 
@@ -236,35 +239,38 @@ class CachedFileList
     self
   end
 
-  def union(cfl)
-    cfl.each do |cfile|
-      cf = @cfile_by_name[cfile.file]
-      if cf
-        cf.union cfile
+  # a = a | b
+  def union(b)
+    b.each do |bf|
+      af = @cfile_by_name[bf.file]
+      if af
+        af.union bf
       else
-        @cfile_by_name[cfile.file] = cfile
+        @cfile_by_name[bf.file] = bf
       end
     end
     self
   end
 
-  def intersection(cfl)
-    @cfile_by_name.each_value do |cfile|
-      cf = cfl[cfile.file]
-      if cf
-        cfile.intersection cf
+  # a = a & b
+  def intersection(b)
+    @cfile_by_name.each_value do |af|
+      bf = b[af.file]
+      if bf
+        af.intersection bf
       else
-        @cfile_by_name.delete cfile.file
+        @cfile_by_name.delete af.file
       end
     end
     self
   end
 
-  def difference(cfl)
-    @cfile_by_name.each_value do |cfile|
-      cf = cfl[cfile.file]
-      if cf != nil
-        cfile.difference cf
+  # a = a - b
+  def difference(b)
+    @cfile_by_name.each_value do |af|
+      bf = b[af.file]
+      if bf != nil
+        af.difference bf
       end
     end
     self
