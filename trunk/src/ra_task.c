@@ -1,4 +1,5 @@
 #include "ra_task.h"
+#include "fadvise.h"
 #include <nptl/pthread.h>
 
 
@@ -135,7 +136,9 @@ do_ra_task (struct RA_task* task)
 
       while (pages != NULL)
         {
-          ret    = readahead(fd, pages->offset, pages->len);
+	/* printf ("%d\t%u\t%u\n", pagesize, (unsigned)(pages->offset/pagesize), (unsigned)(pages->len/pagesize)); */
+	  /* ret    = readahead(fd, pages->offset, pages->len); */
+		ret = __posix_fadvise64(fd, pages->offset, (size_t)pages->len, POSIX_FADV_WILLNEED);
 
           if (ret == -1)
             {
