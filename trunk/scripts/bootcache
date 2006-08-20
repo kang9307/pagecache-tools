@@ -59,7 +59,7 @@ function setup_queue
     local deadline=no
     for queue in $QUEUES
     do
-        local elevators=$($queue/scheduler)
+        local elevators=$(<$queue/scheduler)
         for elv in $elevators
         do
             case "$elv" in
@@ -82,7 +82,7 @@ function setup_queue
             esac
         done
         ELEVATORS="$ELEVATORS $oelv"
-        [ $deadline = 'no' ] && modprobe deadline-iosched || return
+        [ $deadline = 'yes' ] || modprobe deadline-iosched || return
 
         echo deadline   >   $queue/scheduler
         echo 10240      >   $queue/nr_requests
@@ -117,7 +117,7 @@ function reset_queue
 
 function preload
 {
-    [ ! -d "$preload_root" ] && echo "$preload_root/ does not exist!" && return 1
+    [ -d "$preload_root" ] || { echo "no preload data for task '$task'"; return 1; }
 
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
 
