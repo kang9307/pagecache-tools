@@ -15,9 +15,10 @@ CACHE_ROOT=/var/cache/bootcache
 
 case "$1" in
 	start)
-		if [ "$PRELOAD_TASK" -a -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ]
-			bootcache preload $PRELOAD_TASK
-		fi
+		[ -n "$PRELOAD_TASK" ] || exit 0
+		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
+
+		bootcache preload $PRELOAD_TASK
 		;;
 	stop)
 		# No-op
