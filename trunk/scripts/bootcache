@@ -6,11 +6,11 @@ CACHE_ROOT=/var/cache/bootcache
 
 FILECACHE="filecache --verbose $VERBOSE"
 
-task=${2:-boot}
-task_root="$CACHE_ROOT/$task"
-preload_root="$task_root/preload"
-defrag_root="$task_root/defrag"
-defrag_habitat=".defrag-habitat-$task"
+TASK=${2:-boot}
+TASK_ROOT="$CACHE_ROOT/$TASK"
+PRELOAD_ROOT="$TASK_ROOT/preload"
+DEFRAG_ROOT="$TASK_ROOT/defrag"
+DEFRAG_HABITAT=".defrag-habitat-$TASK"
 
 function print_help()
 {
@@ -27,27 +27,27 @@ function rotate_snapshots()
 
 function start()
 {
-    rotate_snapshots "$task_root"
+    rotate_snapshots "$TASK_ROOT"
 
-    $FILECACHE --snapshot --dump "$task_root/snapshot0/start"
+    $FILECACHE --snapshot --dump "$TASK_ROOT/snapshot0/start"
 }
 
 function stop()
 {
     # the boot task will not be calling start
-    if [ -d "$task_root/snapshot0/stop" ]; then
-        rotate_snapshots "$task_root"
+    if [ -d "$TASK_ROOT/snapshot0/stop" ]; then
+        rotate_snapshots "$TASK_ROOT"
     fi
 
     # ditto
-    if [ ! -d "$task_root/snapshot0/start" ]; then
-        mkdir -p "$task_root/snapshot0/start"
+    if [ ! -d "$TASK_ROOT/snapshot0/start" ]; then
+        mkdir -p "$TASK_ROOT/snapshot0/start"
     fi
 
     $FILECACHE --snapshot 'state.include?(?R) or state.include?(?A)' \
-                    --dump "$task_root/snapshot0/stop" \
-                    --difference "$task_root/snapshot0/start" \
-                    --dump "$preload_root"
+                    --dump "$TASK_ROOT/snapshot0/stop" \
+                    --difference "$TASK_ROOT/snapshot0/start" \
+                    --dump "$PRELOAD_ROOT"
 }
 
 
@@ -116,18 +116,18 @@ function reset_queue
 
 function preload
 {
-    [ -d "$preload_root" ] || { echo "no preload data for task '$task'"; return 1; }
+    [ -d "$PRELOAD_ROOT" ] || { echo "no preload data for task '$TASK'"; Return 1; }
 
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
 
-    devs=`cd "$preload_root"; echo *`
+    devs=`cd "$PRELOAD_ROOT"; echo *`
     devs=${devs/bdev}
 
-    readahead-fs "$preload_root/bdev"
+    readahead-fs "$PRELOAD_ROOT/bdev"
 
     for dev in $devs
     do
-        file="$preload_root/$dev"
+        file="$PRELOAD_ROOT/$dev"
         [ -f "$file" ] || continue
 
         (
@@ -145,19 +145,19 @@ function preload
 
 function schedule_defrag()
 {
-    $FILECACHE --load "$preload_root" \
+    $FILECACHE --load "$PRELOAD_ROOT" \
                     --delete-if 'f.size > 200' \
                     --prune-path '^/bin/' \
                     --prune-path '^/lib/lib' \
                     --prune-path '^/lib/lsb/lib' \
-                    --dump "$defrag_root"
+                    --dump "$DEFRAG_ROOT"
 }
 
 function defrag_habitat_dir()
 {
     while read dev mp fstype options
     do
-        local defrag_dir="$mp/$defrag_habitat"
+        local defrag_dir="$mp/$DEFRAG_HABITAT"
 
         [ -b "$dev" ] || continue
 
@@ -189,19 +189,19 @@ function do_defrag()
     defrag_habitat_dir mkdir
 
     # ok, someone insists on doing the defrag...
-    if [ ! -d "$defrag_root" ]; then
+    if [ ! -d "$DEFRAG_ROOT" ]; then
         [ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
         schedule_defrag || return
     fi
 
     # do poor man's defrag
-    $FILECACHE --load "$defrag_root" \
-                --defrag "$defrag_habitat"
+    $FILECACHE --load "$DEFRAG_ROOT" \
+                --defrag "$DEFRAG_HABITAT"
 
     # cleanup the defrag root, or bootcache.sh will call us again and again!
     local retval=$?
-    rm -fr "$defrag_root.old"
-    mv "$defrag_root" "$defrag_root.old"
+    rm -fr "$DEFRAG_ROOT.old"
+    mv "$DEFRAG_ROOT" "$DEFRAG_ROOT.old"
     [ $retval -eq 0 ] || return 1
 
     # update the moved fs metadata
@@ -209,13 +209,13 @@ function do_defrag()
     # so running an update on the next boot is recommended
     $FILECACHE --snapshot 'state.include?(?D)' \
                 --delete-if 'not f.blockdev?' \
-                --union "$preload_root/bdev" \
-                --dump "$preload_root"
+                --union "$PRELOAD_ROOT/bdev" \
+                --dump "$PRELOAD_ROOT"
 }
 
 function do_clear()
 {
-    rm -fr "$task_root"
+    rm -fr "$TASK_ROOT"
     defrag_habitat_dir rmdir
 }
 
