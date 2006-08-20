@@ -475,11 +475,15 @@ opts = OptionParser.new do |opts|
 
     mtab = FSTab.new '/etc/mtab'
     $cfiles.each do |f|
-      # skip obscure files
       fstat = File.lstat f.file
+
+      # skip obscure file
       next unless fstat.file?
 
-      # skip opened files
+      # skip recently modified file
+      next unless Time.now - fstat.mtime > 86400 # 24 hour
+
+      # skip opened file (is it working?)
       File.open(f.file) do |fd|
         unless fd.flock(File::LOCK_EX | File::LOCK_NB)
           puts "skiping opened file #{f.file}" if $verbose >= 2
