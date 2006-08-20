@@ -6,7 +6,7 @@
  {
 +	TIMING_SCRIPT=/etc/init.d/bootcache-timing.sh
 +	[ -x $TIMING_SCRIPT ] && source $TIMING_SCRIPT
-+	[ "$UPTIME_LOG_TIMING" ] && { eval "$UPTIME_LOG_TIMING"; return; }
++	[ "$UPTIME_LOG_TIMING" ] && { eval "$UPTIME_LOG_TIMING"; stop; return; }
 +
  	local runlevel=$( sed -n 's/.*:\(.*\):initdefault:.*/\1/gp' /etc/inittab )
  
