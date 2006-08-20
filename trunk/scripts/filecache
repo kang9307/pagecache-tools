@@ -37,6 +37,13 @@ end
 #
 class FSTab
 
+  NOFS = { 
+      'tmpfs'  => 0, 'ramfs'   => 0, 'sysfs'      => 0, 'proc'        => 0,
+      'rootfs' => 0, 'debugfs' => 0, 'securityfs' => 0, 'sockfs'      => 0,
+      'pipefs' => 0, 'futexfs' => 0, 'inotifyfs'  => 0, 'eventpollfs' => 0,
+      'devpts' => 0, 'mqueue'  => 0, 'usbfs'      => 0, 'binfmt_misc' => 0,
+  }
+
   # retrieve fs entries from /etc/fstab or /etc/mtab or /proc/mounts
   def initialize (file = '/etc/fstab')
 
@@ -47,10 +54,7 @@ class FSTab
       dev, mp, fstype, options = line.split
 
       next if mp[0] != ?/       # skip pseudo fs
-      next if fstype =~ /(tmpfs|ramfs)/
-      next if fstype =~ /(sysfs|rootfs|proc|debugfs|securityfs|sockfs)/
-      next if fstype =~ /(pipefs|futexfs|inotifyfs|eventpollfs|devpts)/
-      next if fstype =~ /(mqueue|usbfs|binfmt_misc)/
+      next if NOFS.has_key? fstype
       next if options =~ /loop/ # no need to readahead loop fs
 
       fs = FileSystem.new(dev, mp, fstype)
