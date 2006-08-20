@@ -43,4 +43,5 @@ UPTIME_LOG_TIMING='wait_for_process ksplash start stop'
 # 	memory_above_any [xx%] [yyyM]
 # 		xx%  - percent of total memory, never be > 95%
 # 		yyyM - the absolute value of megabyte
-CACHE_SNAPSHOT_TIMING='wait_for_process ksplash start stop; memory_above_any 90% 500M'
+# CACHE_SNAPSHOT_TIMING='memory_above_any 80% 300M'
+CACHE_SNAPSHOT_TIMING='wait_for_process ksplash start stop; sleep 5'
