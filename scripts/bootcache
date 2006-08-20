@@ -123,6 +123,7 @@ function do_preload
     [ -d "$PRELOAD_ROOT" ] || { echo "no preload data for task '$TASK'"; Return 1; }
 
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
+    [ -x /usr/bin/ionice ] && /usr/bin/ionice -c3 -p$$
 
     readahead-fs "$PRELOAD_ROOT/bdev" &
 
