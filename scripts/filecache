@@ -123,15 +123,12 @@ class CachedFile
       idx, len, state, refcnt = line.split
       idx, len, refcnt = idx.to_i, len.to_i, refcnt.to_i
       next unless yield(idx, len, state, refcnt)
-      self.add_page_range idx, len
+      add_page_range idx, len
     end
   end
 
   def add_page_range(idx, len = 1)
-    for i in idx...(idx+len)
-      @pages[i] = i
-    end
-    self
+    len.times { |i| @pages[idx + i] = len }
   end
 
   def init_attrs(line = nil)
@@ -349,10 +346,10 @@ class CachedFileList
         # handle normal files
         # - expand file name to full path name
         # - ignore dirs/symlinks
-        dev = "0x#{dev[0,5].delete(':')}".hex
+        dev = dev[0,5].delete(':').hex
         fs = @@fstab[dev]
         next unless fs
-        file = fs.mount_point + file unless fs.mount_point == "/"
+        file = fs.mount_point + file unless fs.mount_point == '/'
         next unless File.file?(file)
       end
 
