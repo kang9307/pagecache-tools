@@ -125,7 +125,7 @@ function do_preload
     devs=`cd "$PRELOAD_ROOT"; echo *`
     devs=${devs/bdev}
 
-    readahead-fs "$PRELOAD_ROOT/bdev"
+    readahead-fs "$PRELOAD_ROOT/bdev" &
 
     for dev in $devs
     do
