@@ -16,7 +16,7 @@ class FileSystem
     @fstype      = fstype
 
     @device_id =
-      if   @device_file == $BDEV_NAME then    $BDEV_ID
+      if   @device_file == $BDEV_NAME then  $BDEV_ID
       elsif File.exist?(@device_file) then  File.stat(@device_file).rdev
       else @device_file.tr! '/', '-';       File.stat(@mount_point).dev end
   end
@@ -25,8 +25,8 @@ class FileSystem
     "FileSystem:\t#{major}:#{minor}\t#{device_file}\t#{mount_point}\t#{fstype}"
   end
 
-  def major() @device_id >> 8   end
-  def minor() @device_id & 0xff end
+  def major()  @device_id >> 8    end
+  def minor()  @device_id & 0xff  end
 
   attr_reader :device_id, :device_file, :mount_point, :fstype
 
@@ -60,12 +60,12 @@ class FSTab
       fs = FileSystem.new(dev, mp, fstype)
       @fs_by_id[fs.device_id] ||= fs
 
-    end  # File.foreach
+    end
 
     @fs_by_id.delete(0) # in case we get device_id=0 for hotplug devices.
 
     # the filesystem for block special files
-    @fs_by_id[$BDEV_ID] = FileSystem.new($BDEV_NAME, "", $BDEV_NAME)
+    @fs_by_id[$BDEV_ID] = FileSystem.new($BDEV_NAME, '', $BDEV_NAME)
 
     self
   end
@@ -80,13 +80,9 @@ class FSTab
   end
 
   def to_s
-    ret = "FSTab:\n"
-
-    @fs_by_id.each_value do |fs|
-      ret = ret + "#{fs.to_s}\n"
-    end
-
-    ret
+    str = "FSTab:\n"
+    @fs_by_id.each_value { |fs| str << "#{fs.to_s}\n" }
+    str
   end
 
 end
@@ -104,7 +100,7 @@ class CachedFile
   def CachedFile.filecache
     unless defined? @@filecache
       @@filecache = File.open('/proc/filecache', File::RDWR)
-      @@filecache.syswrite 'private session'
+      @@filecache.syswrite('private session')
       @@filecache.rewind
     end
     @@filecache
@@ -122,7 +118,6 @@ class CachedFile
 
   def init_pages
     filecache = CachedFile.filecache
-    filecache.rewind
     filecache.syswrite @file
     filecache.rewind
     filecache.each_line do |line|
@@ -139,8 +134,7 @@ class CachedFile
 
   def init_attrs(line = nil)
     if line
-      ino, size, cached, cachedp, state,
-        refcnt, dev, file = line.split
+      ino, size, cached, cachedp, state, refcnt, dev, file = line.split
       @state  = state
       @refcnt = refcnt.to_i
     end
@@ -170,13 +164,8 @@ class CachedFile
     percent
   end
 
-  def blockdev?
-    @dev == $BDEV_ID
-  end
-
-  def empty?
-    @pages.empty?
-  end
+  def blockdev?()  @dev == $BDEV_ID  end
+  def empty?()     @pages.empty?     end
 
   # a = a | b
   def union(b)
@@ -219,7 +208,7 @@ class CachedFile
   def to_s
     s = "#{@file}\n"
     page_ranges.each { |span| s << "#{span[0]}\t#{span[1]}\n" }
-    s = s + "\n"
+    s << "\n"
   end
 
 end
@@ -290,9 +279,7 @@ class CachedFileList
   end
 
   def delete_if
-    @cfile_by_name.delete_if do |key, cfile|
-      yield(cfile)
-    end
+    @cfile_by_name.delete_if { |key, cfile| yield(cfile) }
     self
   end
 
@@ -303,9 +290,7 @@ class CachedFileList
     read_filecache_index filecache
 
     @cfile_by_name.each_value do |cfile|
-      cfile.init_pages do |idx, len, state, refcnt|
-        eval condition
-      end
+      cfile.init_pages { |idx, len, state, refcnt| eval condition }
     end
 
     self
@@ -314,7 +299,6 @@ class CachedFileList
   # get the cached file list from /proc/filecache.
   def read_filecache_index(filecache)
     CachedFile.reset_seq
-    filecache.rewind
     filecache.syswrite('index')
     filecache.rewind
     filecache.each_line do |line|
@@ -407,7 +391,7 @@ class CachedFileList
       next unless fs
       fds[cfile.dev] ||= File.open("#{dir}/#{File.basename fs.device_file}",
                                     File::CREAT | File::TRUNC | File::RDWR)
-      fds[cfile.dev].printf("%s", cfile.to_s)
+      fds[cfile.dev].print cfile.to_s
     end
 
     fds.each_value { |fd| fd.close }
@@ -425,66 +409,63 @@ require 'ostruct'
 require 'fileutils'
 
 $verbose = 0
-
 $cfiles = CachedFileList.new
 
 opts = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options]"
+  opts.separator ''
+  opts.separator 'Available options:'
 
-  opts.separator ""
-  opts.separator "Available options:"
-
-
-  opts.on("-v", "--verbose [LEVEL]", "set level of verbosity") do |level|
+  opts.on('-v', '--verbose [LEVEL]', 'set level of verbosity') do |level|
     $verbose = (level || 1).to_i
   end
 
-  opts.on("-s", "--snapshot [CONDITION]",
-    "load from /proc/filecache filtering pages with CONDITION.") do |condition|
+  opts.on('-s', '--snapshot [CONDITION]',
+    'load from /proc/filecache filtering pages with CONDITION.') do |condition|
     $cfiles.snapshot(condition || 'true')
   end
 
-  opts.on("-l", "--load SRC",
-                "load the pre-saved snapshot from SRC file/dir.") do |src|
+  opts.on('-l', '--load SRC',
+                'load the pre-saved snapshot from SRC file/dir.') do |src|
     $cfiles.load src
   end
 
-  opts.on("-d", "--dump DST", "dump the snapshot to the DST dir.") do |dst|
+  opts.on('-d', '--dump DST', 'dump the snapshot to the DST dir.') do |dst|
     Dir.mkdir(dst) if !FileTest.exist?(dst)
     $cfiles.dump dst
   end
 
-  opts.on("-u", "--union SRC", "the set union.") do |src|
+  opts.on('-u', '--union SRC', 'the set union.') do |src|
     $cfiles.union CachedFileList.new.load(src)
   end
 
-  opts.on("-i", "--intersection SRC",
-                "the set intersect between pre-snapshort and SRC.") do |src|
+  opts.on('-i', '--intersection SRC',
+                'the set intersect between pre-snapshort and SRC.') do |src|
     $cfiles.intersection CachedFileList.new.load(src)
   end
 
-  opts.on("-f", "--difference SRC",
-                "the set difference between pre-snapshort and SRC.") do |src|
+  opts.on('-f', '--difference SRC',
+                'the set difference between pre-snapshort and SRC.') do |src|
     $cfiles.difference CachedFileList.new.load(src)
   end
 
-  opts.on("-F", "--rdifference SRC",
-                "the set difference between pre-snapshort and SRC.") do |src|
+  opts.on('-F', '--rdifference SRC',
+                'the set difference between pre-snapshort and SRC.') do |src|
     c = CachedFileList.new.load(src)
     c.difference $cfiles
     $cfiles = c
   end
 
-  opts.on("--prune-path PATTERN", "exclude files matching PATTERN.") do |pattern|
+  opts.on('--prune-path PATTERN', 'exclude files matching PATTERN.') do |pattern|
     p = Regexp.new(pattern)
     $cfiles.delete_if { |f| p =~ f.file }
   end
 
-  opts.on("--delete-if CONDITION", "delete files satisfying CONDITION.") do |condition|
+  opts.on('--delete-if CONDITION', 'delete files satisfying CONDITION.') do |condition|
     $cfiles.delete_if { |f| eval condition }
   end
 
-  opts.on("--defrag HABITAT", "do poor man's defrag via dir HABITAT.") do |habitat|
+  opts.on('--defrag HABITAT', 'do poor man\'s defrag via dir HABITAT.') do |habitat|
 
     unless 'Ss016'.include? `runlevel`[2]
       print 'WARNING: defraging in multi-user mode may lead to data corruption.'
@@ -519,8 +500,8 @@ opts = OptionParser.new do |opts|
       begin
         FileUtils.cp f.file, hfile, :preserve => true
         tstat = File.lstat hfile
-        raise "not in same filesystem" if fstat.dev != tstat.dev
-        raise "file changed" if fstat.size != tstat.size or
+        raise 'not in same filesystem' if fstat.dev != tstat.dev
+        raise 'file changed' if fstat.size != tstat.size or
                                 fstat.mode != tstat.mode or
                                 fstat.mtime != tstat.mtime
         FileUtils.rm f.file
@@ -533,7 +514,7 @@ opts = OptionParser.new do |opts|
     end
   end
 
-  opts.on_tail("-h", "--help", "Show this message.") do
+  opts.on_tail('-h', '--help', 'Show this message.') do
     puts opts
   end
 end
