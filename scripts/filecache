@@ -424,6 +424,11 @@ opts = OptionParser.new do |opts|
     filecache.each_line { |line| puts line }
   end
 
+  opts.on('-D', '--drop WHAT',
+                'drop cached data or metadata.') do |what|
+    CachedFile.filecache.syswrite what
+  end
+
   opts.on('-s', '--snapshot [CONDITION]',
     'load from /proc/filecache filtering pages with CONDITION.') do |condition|
     $cfiles.snapshot(condition || 'true')
