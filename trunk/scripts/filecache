@@ -106,8 +106,8 @@ class CachedFile
     @@filecache
   end
 
-  attr_reader   :dev, :file, :pages, :seq
-  attr_accessor :ino, :size, :state, :refcnt
+  attr_reader   :file, :seq, :pages
+  attr_accessor :dev,  :ino, :size, :state, :refcnt
 
   def initialize(file)
     @file = file
@@ -132,13 +132,7 @@ class CachedFile
     len.times { |i| @pages[idx + i] = len }
   end
 
-  def init_attrs(line = nil)
-    if line
-      ino, size, cached, cachedp, state, refcnt, dev, file = line.split
-      @state  = state
-      @refcnt = refcnt.to_i
-    end
-
+  def init_attrs
     stat = File.lstat(@file)
     if stat.blockdev?
       @dev = $BDEV_ID
@@ -304,7 +298,8 @@ class CachedFileList
     filecache.each_line do |line|
       next if line[0] == ?#
 
-      dev, file = line.split.values_at(-2, -1)
+      ino, size, cached, cachedp, state, refcnt, dev, file = line.split
+
       next if file == '(noname)'
       if file.include? ?\\
         file.gsub! '\011', "\011"  # ht
@@ -316,10 +311,10 @@ class CachedFileList
       if file =~ /\([0-9a-f]{2}:[0-9a-f]{2}\)/ then
         # handle block device
         # - transform file name from digital form to real ones
-        dev = file.delete('(:)').hex
-        fs  = @@fstab[dev]
+        fs  = @@fstab[file.delete('(:)').hex]
         next unless fs
-        file  = fs.device_file
+        file = fs.device_file
+        dev  = $BDEV_ID
       else
         # handle normal files
         # - expand file name to full path name
@@ -331,8 +326,12 @@ class CachedFileList
         next unless File.file?(file)
       end
 
-      cfile = CachedFile.new file
-      cfile.init_attrs line
+      cfile        = CachedFile.new file
+      cfile.dev    = dev
+      cfile.state  = state
+      cfile.ino    = ino.to_i
+      cfile.size   = size.to_i
+      cfile.refcnt = refcnt.to_i
       @cfile_by_name[file] = cfile
     end # filecache.each_line
   end
