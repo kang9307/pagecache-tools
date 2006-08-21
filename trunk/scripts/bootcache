@@ -49,6 +49,7 @@ function do_stop()
                            state.include?(?M)" \
                     --dump "$TASK_ROOT/snapshot0/stop" \
                     --difference "$TASK_ROOT/snapshot0/start" \
+                    --prune-path '^(/var/|/tmp/)' \
                     --dump "$PRELOAD_ROOT"
 }
 
