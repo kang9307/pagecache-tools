@@ -318,10 +318,7 @@ class CachedFileList
         # - transform file name from digital form to real ones
         dev = file.delete('(:)').hex
         fs  = @@fstab[dev]
-        unless fs
-          puts "unknown device file #{file}" if $verbose >= 2
-          next
-        end
+        next unless fs
         file  = fs.device_file
       else
         # handle normal files
