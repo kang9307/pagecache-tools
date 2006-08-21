@@ -489,6 +489,9 @@ opts = OptionParser.new do |opts|
       # skip obscure file
       next unless fstat.file?
 
+      # skip multi-linked file
+      next unless fstat.nlink > 1
+
       # skip recently modified file
       next unless Time.now - fstat.mtime > 86400 # 24 hour
 
