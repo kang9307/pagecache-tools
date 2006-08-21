@@ -1,6 +1,6 @@
 =head1 NAME
 
-filecache - tool for /proc/filecache
+filecache - tool for F</proc/filecache>
 
 =head1 SYNOPSIS
 
@@ -11,6 +11,8 @@ B<filecache> [options]
 B<filecache> operates on an ordered set of cached files.
 
 =over 8
+
+=item F</proc/filecache> interface: B<--query>, B<--drop>
 
 =item data importing: B<--snapshot>, B<--load>
 
@@ -34,9 +36,18 @@ Available options:
 
 set level of verbosity
 
+=item B<-q>, B<--query> [I<FILE>]
+
+Query cached pages of I<FILE> via F</proc/filecache>.
+If I<FILE> is omitted, query the status of all cached files.
+
+=item B<-D>, B<--drop> I<data|metadata>
+
+Drop all cached data or metadata.
+
 =item B<-s>, B<--snapshot> [I<CONDITION>]
 
-take a snapshot of I</proc/filecache>, accept only the pages satisfy I<CONDITION>.
+take a snapshot of F</proc/filecache>, accept only the pages satisfy I<CONDITION>.
 I<CONDITION> is a piece of ruby code that returns C<true>/C<false>. Avaiable fields:
 
 =over 4
