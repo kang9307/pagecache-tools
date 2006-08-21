@@ -1,10 +1,10 @@
 =head1 NAME
 
-bootcache - page cache tool for fast system boot/application startup
+bootcache - boot cache tool for better linux boot time
 
 =head1 SYNOPSIS
 
-B<bootcache> {B<start>B<stop>B<preload>B<defrag>B<defrag-now>} [\I<task>]
+B<bootcache> {B<start>|B<stop>|B<preload>|B<defrag>|B<defrag-now>} [I<task>]
 
 =head1 DESCRIPTION
 
@@ -27,27 +27,29 @@ I<task> defaults to C<boot> if not specified.
 
 =item B<defrag-now>  do the defrag now, instead of leaving it to shutdown/reboot time.
 
+=item B<clear>       clear all data of I<task>.
+
 =back
 
 =head1 FILES
 
 =over 4
 
-=item B</etc/default/bootcache>
+=item F</etc/default/bootcache>
 
-=item B</var/lib/bootcache/uptime>
+=item F</var/lib/bootcache/uptime>
 
-=item B</var/lib/bootcache/{task}/snapshot0/>
+=item F</var/lib/bootcache/{task}/snapshot0/>
 
-=item B</var/lib/bootcache/{task}/snapshot1/>
+=item F</var/lib/bootcache/{task}/snapshot1/>
 
-=item B</var/lib/bootcache/{task}/snapshot2/>
+=item F</var/lib/bootcache/{task}/snapshot2/>
 
-=item B</var/lib/bootcache/{task}/preload/>
+=item F</var/lib/bootcache/{task}/preload/>
 
-=item B</var/lib/bootcache/{task}/defrag/>
+=item F</var/lib/bootcache/{task}/defrag/>
 
-=item B<{mount-point}/.defrag-habitat-{task}/>
+=item F<{mount-point}/.defrag-habitat-{task}/>
 
 =back
 
