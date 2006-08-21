@@ -44,6 +44,8 @@ function do_stop()
         mkdir -p "$TASK_ROOT/snapshot0/start"
     fi
 
+    rm -f "$PRELOAD_ROOT/*"
+
     $FILECACHE --snapshot "state.include?(?R) or \
                            state.include?(?A) or \
                            state.include?(?M)" \
