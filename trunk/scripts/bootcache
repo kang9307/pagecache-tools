@@ -178,14 +178,18 @@ function do_habitat_dir()
         # consistent/persistent - created once, reuse afterwards
         [ -d "$defrag_dir" ] && continue
 
-        # This option for ext2/3 filesystem instructs it to create top level
-        # dirs in the most empty group. One group is normally 100M sized,
-        # so we should limit the total size of moved files. Moving inodes
-        # to the habitat dir helps make continuous data blocks and inode blocks.
-        # The only stuffs remaining disordered are the directory file blocks.
-        # A simple experiment shows that one set of 1578 cached system files 
-        # only involves 259 uniq paths. So the remained fragmentation is
-        # expected to be trivial enough.
+        # The oldalloc option for ext2/3 filesystem instructs it to create top
+        # level dirs in the most empty group. One group is normally 100M sized,
+        # so we should limit the total size of moved files.  One observation
+        # is that the orlov allocator makes unbalanced use of groups(check it
+        # out for yourself using `dumpe2fs /dev/hda2 | grep free`), which is
+        # exactly what we want ;-)
+        #
+        # Moving inodes to the habitat dir helps make continuous data blocks
+        # and inode blocks.  The only stuffs remaining disordered are the
+        # directory file blocks.  A simple experiment shows that one set of
+        # 1578 cached system files only involves 259 uniq paths. So the
+        # remained fragmentation is expected to be trivial enough.
         if [ $fstype = 'ext2' -o $fstype = 'ext3' ]; then
             mount -o oldalloc,remount $mp
         fi
