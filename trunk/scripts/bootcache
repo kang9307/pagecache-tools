@@ -262,7 +262,7 @@ case "$1" in
         trap "reset_queue; exit" EXIT HUP INT ABRT QUIT SEGV TERM
         setup_queue
         do_preload
-        wait_for_process_stop readahead-fs
+        wait_for_process_stop readahead-fs; sleep 10
         reset_queue $ELEVATORS
         ;;
     defrag)
