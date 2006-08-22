@@ -160,7 +160,7 @@ function schedule_defrag()
                     --dump "$DEFRAG_ROOT"
 }
 
-function defrag_habitat_dir()
+function do_habitat_dir()
 {
     while read dev mp fstype options
     do
@@ -193,7 +193,7 @@ function defrag_habitat_dir()
 function do_defrag()
 {
     # prepare the defrag habitat dirs for each filesystem
-    defrag_habitat_dir mkdir
+    do_habitat_dir mkdir
 
     # ok, someone insists on doing the defrag...
     if [ ! -d "$DEFRAG_ROOT" ]; then
@@ -226,12 +226,12 @@ function do_defrag()
 function do_clear()
 {
     rm -fr "$TASK_ROOT"
-    defrag_habitat_dir rmdir
+    do_habitat_dir rmdir
 }
 
 function do_remove_habitat()
 {
-    defrag_habitat_dir rmdir
+    do_habitat_dir rmdir
 }
 
 function wait_for_process_stop()
