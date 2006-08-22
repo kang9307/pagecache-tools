@@ -143,8 +143,10 @@ function do_preload
         (
             while true
             do
-                [ "$RUNLEVEL" != 'S' ]            && break  # early boot time?
-                grep -q ${dev//\//-} /proc/mounts && break  # device mounted?
+                runlevel=`runlevel`  # we need dynamic one, not static $RUNLEVEL
+                [ ${runlevel:2} != 'S' ]          && break  # early boot time?
+                grep -q ${dev//\//-} /etc/mtab    && break  # device mounted?
+                grep -q ${dev//\//-} /proc/mounts && break  # yeah, both is needed
                 sleep 1
             done
 
