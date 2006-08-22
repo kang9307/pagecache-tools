@@ -229,6 +229,11 @@ function do_clear()
     defrag_habitat_dir rmdir
 }
 
+function do_remove_habitat()
+{
+    defrag_habitat_dir rmdir
+}
+
 function wait_for_process_stop()
 {
     while pidof $1 > /dev/null; do sleep 1; done
@@ -258,6 +263,9 @@ case "$1" in
         ;;
     defrag-now)
         do_defrag
+        ;;
+    remove-habitat)
+        do_remove_habitat
         ;;
     clear)
         do_clear
