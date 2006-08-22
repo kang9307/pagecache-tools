@@ -168,7 +168,7 @@ function do_habitat_dir()
 
         [ -b "$dev" ] || continue
 
-        # clear task dirs?
+        # delete task or prepare for migration to a better group?
         if [ $1 = 'rmdir' ]; then
             [ -d "$defrag_dir" ] && rmdir "$defrag_dir"
             continue
