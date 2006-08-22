@@ -143,8 +143,8 @@ function do_preload
         (
             while true
             do
-                grep -q $dev /etc/mtab    && break
-                grep -q $dev /proc/mounts && break
+                [ "$RUNLEVEL" != 'S' ]            && break  # early boot time?
+                grep -q ${dev//\//-} /proc/mounts && break  # device mounted?
                 sleep 1
             done
 
