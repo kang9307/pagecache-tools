@@ -86,6 +86,16 @@ function log_boot_time()
 	)&
 }
 
+function log_bootchart()
+{
+	local task_root="$CACHE_ROOT/$PRELOAD_TASK"
+	[ -e $task_root/bootchart3.png ] && rm -fr $task_root/bootchart3.png
+	[ -e $task_root/bootchart2.png ] && mv $task_root/bootchart2.png $task_root/bootchart3.png
+	[ -e $task_root/bootchart1.png ] && mv $task_root/bootchart1.png $task_root/bootchart2.png
+	[ -e $task_root/bootchart.png ]  && mv $task_root/bootchart.png  $task_root/bootchart1.png
+	bootchart -o $task_root
+}
+
 function take_filecache_snapshot()
 {
 	[ -z "$CACHE_SNAPSHOT_TIMING" ] && return
@@ -96,6 +106,9 @@ function take_filecache_snapshot()
 
 		# take a snapshot of /proc/filecache
 		bootcache stop boot
+
+		# debug the boot progress
+		[ "$VERBOSE" -ge 10 ] && log_bootchart
 	)&
 }
 
