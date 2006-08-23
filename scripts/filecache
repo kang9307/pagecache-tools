@@ -531,6 +531,7 @@ opts = OptionParser.new do |opts|
         FileUtils.rm f.file
         FileUtils.ln hfile, f.file
         FileUtils.rm hfile
+        puts "#{f.file} <=> #{hfile}" if $verbose >= 11
       rescue Exception => msg
         $stderr.puts "Failed to defrag file #{f.file} => #{hfile}: #{msg}."
         exit 1
