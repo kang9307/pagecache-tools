@@ -495,7 +495,7 @@ opts = OptionParser.new do |opts|
       next unless fstat.file?
 
       # skip multi-linked file
-      next unless fstat.nlink > 1
+      next unless fstat.nlink == 1
 
       # skip recently modified file
       next unless Time.now - fstat.mtime > 86400 # 24 hour
@@ -517,8 +517,8 @@ opts = OptionParser.new do |opts|
         exit 1
       end
 
-      defrag_files = defrag_files + 1
-      defrag_size  = defrag_size + fstat.size
+      moved_files = moved_files + 1
+      moved_size  = moved_size + fstat.size
 
       # poor man's defrag ;-)
       begin
