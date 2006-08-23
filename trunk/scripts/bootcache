@@ -9,6 +9,7 @@ FILECACHE="filecache --verbose $VERBOSE"
 TASK=${2:-boot}
 TASK_ROOT="$CACHE_ROOT/$TASK"
 PRELOAD_ROOT="$TASK_ROOT/preload"
+SNAPSHOT_ROOT="$TASK_ROOT/snapshot0"
 DEFRAG_ROOT="$TASK_ROOT/defrag"
 DEFRAG_HABITAT=".defrag-habitat-$TASK"
 
@@ -29,19 +30,19 @@ function do_start()
 {
     rotate_snapshots "$TASK_ROOT"
 
-    $FILECACHE --snapshot --dump "$TASK_ROOT/snapshot0/start"
+    $FILECACHE --snapshot --dump "$SNAPSHOT_ROOT/start"
 }
 
 function do_stop()
 {
     # the boot task will not be calling start
-    if [ -d "$TASK_ROOT/snapshot0/stop" ]; then
+    if [ -d "$SNAPSHOT_ROOT/stop" ]; then
         rotate_snapshots "$TASK_ROOT"
     fi
 
     # ditto
-    if [ ! -d "$TASK_ROOT/snapshot0/start" ]; then
-        mkdir -p "$TASK_ROOT/snapshot0/start"
+    if [ ! -d "$SNAPSHOT_ROOT/start" ]; then
+        mkdir -p "$SNAPSHOT_ROOT/start"
     fi
 
     rm -f "$PRELOAD_ROOT"/*
@@ -49,8 +50,8 @@ function do_stop()
     $FILECACHE --snapshot "state.include?(?R) or \
                            state.include?(?A) or \
                            state.include?(?M)" \
-                    --dump "$TASK_ROOT/snapshot0/stop" \
-                    --difference "$TASK_ROOT/snapshot0/start" \
+                    --dump "$SNAPSHOT_ROOT/stop" \
+                    --difference "$SNAPSHOT_ROOT/start" \
                     --prune-path '^(/var/|/tmp/)' \
                     --dump "$PRELOAD_ROOT"
 }
