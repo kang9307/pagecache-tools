@@ -15,6 +15,7 @@ CACHE_ROOT=/var/cache/bootcache
 
 case "$1" in
 	start)
+		grep -q nopreload /proc/cmdline && exit 0
 		[ -n "$PRELOAD_TASK" ] || exit 0
 		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
 
