@@ -9,7 +9,7 @@ FILECACHE="filecache --verbose $VERBOSE"
 TASK=${2:-boot}
 TASK_ROOT="$CACHE_ROOT/$TASK"
 PRELOAD_ROOT="$TASK_ROOT/preload"
-SNAPSHOT_ROOT="$TASK_ROOT/snapshot0"
+SNAPSHOT_ROOT="$TASK_ROOT/snapshot"
 DEFRAG_ROOT="$TASK_ROOT/defrag"
 DEFRAG_HABITAT=".defrag-habitat-$TASK"
 
@@ -20,15 +20,18 @@ function print_help()
 
 function rotate_snapshots()
 {
-    [ -e "$1/snapshot2" ] && rm -fr "$1/snapshot2"
-    [ -e "$1/snapshot1" ] && mv "$1/snapshot1" "$1/snapshot2"
-    [ -e "$1/snapshot0" ] && mv "$1/snapshot0" "$1/snapshot1"
-    mkdir -p "$1/snapshot0"
+    local s="$SNAPSHOT_ROOT"
+    local p="$PRELOAD_ROOT"
+    [ -e "${s}3" ] && rm -fr "${s}3" "${p}3"
+    [ -e "${s}2" ] && mv "${s}2" "${s}3" && mv "${p}2" "${p}3"
+    [ -e "${s}1" ] && mv "${s}1" "${s}2" && mv "${p}1" "${p}2"
+    [ -e "${s}" ]  && mv "${s}"  "${s}1" && mv "${p}"  "${p}1"
+    mkdir -p "${s}"
 }
 
 function do_start()
 {
-    rotate_snapshots "$TASK_ROOT"
+    rotate_snapshots
 
     $FILECACHE --snapshot --dump "$SNAPSHOT_ROOT/start"
 }
@@ -37,7 +40,7 @@ function do_stop()
 {
     # the boot task will not be calling start
     if [ -d "$SNAPSHOT_ROOT/stop" ]; then
-        rotate_snapshots "$TASK_ROOT"
+        rotate_snapshots
     fi
 
     # ditto
