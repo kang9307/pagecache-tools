@@ -152,7 +152,7 @@ function schedule_defrag()
     fi
 
     $FILECACHE --load "$PRELOAD_ROOT" \
-                    --delete-if 'f.size > 200' \
+                    --limit-size 300 \
                     --dump "$DEFRAG_ROOT"
 }
 
