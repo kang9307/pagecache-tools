@@ -206,12 +206,12 @@ function do_defrag()
 
     # ok, someone insists on doing the defrag...
     if [ ! -d "$DEFRAG_ROOT" ]; then
-        [ $VERBOSE -gt 0 ] && echo "Preparing defrag task $task for immediate run..."
+        [ $VERBOSE -gt 0 ] && echo "preparing defrag task $task for immediate run ..."
         schedule_defrag || return
     fi
 
     # do poor man's defrag
-    echo -n "running poor man's defrag for task '$TASK' ..."
+    echo "running poor man's defrag for task '$TASK' ..."
     $FILECACHE --load "$DEFRAG_ROOT" \
                 --defrag "$DEFRAG_HABITAT"
 
@@ -219,7 +219,7 @@ function do_defrag()
     local retval=$?
     rm -fr "$DEFRAG_ROOT.old"
     mv "$DEFRAG_ROOT" "$DEFRAG_ROOT.old"
-    [ $retval -eq 0 ] || { echo 'failed'; return 1; }
+    [ $retval -eq 0 ] || { echo "failed to defrag '$TASK'"; return $retval; }
 
     # update the moved fs metadata
     # it will include old metadata from the deleted inodes
@@ -228,8 +228,6 @@ function do_defrag()
                 --delete-if 'not f.blockdev?' \
                 --union "$PRELOAD_ROOT/bdev" \
                 --dump "$PRELOAD_ROOT"
-
-    echo 'done'
 }
 
 function do_clear()
