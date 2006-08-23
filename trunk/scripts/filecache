@@ -347,7 +347,7 @@ class CachedFileList
         load_file file
       end
     else
-      $stderr.puts "#{@path} not a file or directory."
+      $stderr.puts "#{path} not a file or directory."
       exit 1
     end
     self

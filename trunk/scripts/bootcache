@@ -154,6 +154,11 @@ function do_preload
 
 function schedule_defrag()
 {
+    if [ ! -d "$PRELOAD_ROOT" ]; then
+        echo "sorry, no preload data for task '$TASK'"
+        return 1
+    fi
+
     $FILECACHE --load "$PRELOAD_ROOT" \
                     --delete-if 'f.size > 200' \
                     --dump "$DEFRAG_ROOT"
@@ -266,7 +271,7 @@ case "$1" in
         ;;
     defrag)
         schedule_defrag
-        if [ $VERBOSE -gt 0 ]; then
+        if [ $? -eq 0 -a $VERBOSE -gt 0 ]; then
             echo "Defrag task $task scheduled, will run it on reboot/shutdown."
             echo "It is recommended to take a new snapshot on next boot,"
             echo "for the defrag will make our metadata info out of sync."
