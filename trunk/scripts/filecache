@@ -257,6 +257,13 @@ class CachedFileList
   end
 
   def each
+    @cfile_by_name.each_value do |cfile|
+        yield cfile
+    end
+    self
+  end
+
+  def each_ordered
     @cfile_by_name.values.sort {|x,y| x.seq <=> y.seq} .each do |cfile|
         yield cfile
     end
@@ -474,6 +481,21 @@ opts = OptionParser.new do |opts|
     $cfiles.delete_if { |f| eval condition }
   end
 
+  opts.on('--account', 'show some accounting numbers') do
+    files = 0
+    size = 0
+    cached = 0
+    ranges = 0
+    $cfiles.each do |f|
+      files = files + 1
+      size = size + f.size
+      cached = cached + f.cached
+      ranges = ranges + f.page_ranges.size
+    end
+    printf "total  %3d MiB in %5d\tfiles\n", size >> 10, files
+    printf "cached %3d MiB in %5d\tranges\n", cached >> 10, ranges
+  end
+
   opts.on('--defrag HABITAT', 'do poor man\'s defrag via dir HABITAT.') do |habitat|
 
     unless 'Ss016'.include? `runlevel`[2]
@@ -486,7 +508,7 @@ opts = OptionParser.new do |opts|
     total_files = total_size = 0
     moved_files = moved_size = 0
 
-    $cfiles.each do |f|
+    $cfiles.each_ordered do |f|
       fstat = File.lstat f.file
       total_files = total_files + 1
       total_size  = total_size + fstat.size
