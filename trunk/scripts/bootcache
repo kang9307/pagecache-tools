@@ -96,9 +96,6 @@ function setup_queue
         ELEVATORS="$ELEVATORS $oelv"
         echo deadline   >   $queue/scheduler
         echo 10240      >   $queue/nr_requests
-        echo 10         >   $queue/iosched/fifo_batch
-        echo 0          >   $queue/iosched/read_expire
-        echo 120000     >   $queue/iosched/reada_expire
     done
 }
 
@@ -112,8 +109,6 @@ function reset_queue
             return
         elif [ $elv != 'deadline' ]; then
             echo $elv > $queue/scheduler
-        else
-            echo 100  > $queue/iosched/read_expire
         fi
         echo 128  > $queue/nr_requests
     done
@@ -127,8 +122,6 @@ function do_preload
     [ -x /usr/bin/ionice ] && /usr/bin/ionice -c3 -p$$
 
     readahead-fs -t 1 "$PRELOAD_ROOT/bdev" &
-
-    until pidof udevd > /dev/null; do sleep 1; done
 
     local devs=`cd "$PRELOAD_ROOT"; echo *`
 
