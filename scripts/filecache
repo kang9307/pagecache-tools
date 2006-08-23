@@ -483,8 +483,13 @@ opts = OptionParser.new do |opts|
     end
 
     mtab = FSTab.new '/etc/mtab'
+    total_files = total_size = 0
+    moved_files = moved_size = 0
+
     $cfiles.each do |f|
       fstat = File.lstat f.file
+      total_files = total_files + 1
+      total_size  = total_size + fstat.size
 
       # skip obscure file
       next unless fstat.file?
@@ -512,6 +517,9 @@ opts = OptionParser.new do |opts|
         exit 1
       end
 
+      defrag_files = defrag_files + 1
+      defrag_size  = defrag_size + fstat.size
+
       # poor man's defrag ;-)
       begin
         FileUtils.cp f.file, hfile, :preserve => true
@@ -528,6 +536,12 @@ opts = OptionParser.new do |opts|
         exit 1
       end
     end
+
+    if $verbose >= 2
+      puts "moved  #{moved_files} files / #{moved_size >> 20} MB"
+      puts "out of #{total_files} files / #{total_size >> 20} MB"
+    end
+
   end
 
   opts.on_tail('-h', '--help', 'Show this message.') do
