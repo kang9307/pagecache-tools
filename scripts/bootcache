@@ -131,16 +131,15 @@ function do_preload
         [ -f "$file" ] || continue
 
         (
-            while true
+            for i in 1 2 3 4 5 6 7 8 9 10
             do
-                runlevel=`runlevel`  # we need dynamic one, not static $RUNLEVEL
-                [ ${runlevel:2} != 'S' ]          && break  # early boot time?
+                [ -z "$RUNLEVEL" ]                && break  # early boot time?
                 grep -q ${dev//\//-} /etc/mtab    && break  # device mounted?
                 grep -q ${dev//\//-} /proc/mounts && break  # yeah, both is needed
-                sleep 1
+                sleep $i
             done
 
-            readahead-fs -t 50 "$file"
+            [ $i != 10 ] && readahead-fs -t 50 "$file"
         )&
     done
 }
