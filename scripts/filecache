@@ -472,6 +472,11 @@ opts = OptionParser.new do |opts|
     $cfiles = c
   end
 
+  opts.on('--limit-size KB', 'delete files larger than KB.') do |kb|
+    KB = kb.to_i
+    $cfiles.delete_if { |f| f.size > KB }
+  end
+
   opts.on('--prune-path PATTERN', 'exclude files matching PATTERN.') do |pattern|
     p = Regexp.new(pattern)
     $cfiles.delete_if { |f| p =~ f.file }
