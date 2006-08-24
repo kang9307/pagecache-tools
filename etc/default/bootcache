@@ -9,7 +9,7 @@
 CACHE_ROOT=/var/cache/bootcache
 
 # Verbose level
-VERBOSE=0
+VERBOSE=10
 
 
 ##
