@@ -95,6 +95,7 @@ function setup_queue
 
         ELEVATORS="$ELEVATORS $oelv"
         echo deadline   >   $queue/scheduler
+        echo 0          >   $queue/iosched/read_expire
         echo 10240      >   $queue/nr_requests
     done
 }
@@ -109,6 +110,8 @@ function reset_queue
             return
         elif [ $elv != 'deadline' ]; then
             echo $elv > $queue/scheduler
+        else
+            echo 200  > $queue/iosched/read_expire
         fi
         echo 128  > $queue/nr_requests
     done
