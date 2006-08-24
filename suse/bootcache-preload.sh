@@ -1,9 +1,9 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          bootcache-preload
-# Required-Start:    mountkernfs
+# Required-Start:    
 # Required-Stop:
-# Default-Start:     S
+# Default-Start:     B
 # Default-Stop:
 # Short-Description: boot time speedup through precaching
 ### END INIT INFO
@@ -19,6 +19,7 @@ case "$1" in
 		[ -n "$PRELOAD_TASK" ] || exit 0
 		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
 
+		mount -n -t sysfs sysfs /sys
 		bootcache preload $PRELOAD_TASK &
 		;;
 	stop)

@@ -1,9 +1,9 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          bootcache-timing
-# Required-Start:    rmnologin
+# Required-Start:    $ALL
 # Required-Stop:
-# Default-Start:     2 3 4 5
+# Default-Start:     5
 # Default-Stop:
 # Short-Description: run bootcache tasks when boot completed
 # Description:
