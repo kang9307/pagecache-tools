@@ -156,6 +156,7 @@ function schedule_defrag()
 
     $FILECACHE --load "$PRELOAD_ROOT" \
                     --limit-size 300 \
+                    --prune-path '/font' \
                     --dump "$DEFRAG_ROOT"
 }
 
