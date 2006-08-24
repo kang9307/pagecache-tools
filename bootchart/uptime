@@ -1,0 +1,42 @@
+The following are the uptime numbers, though not a strict one-to-one map to the
+bootchart pictures. It shows about 30% speed improvement.
+
+It seems that the defragger reduced a little SYSV boot time, and some idle
+time. However the GUI boot time is not affected. It's weird, maybe there are
+too much stats(~2000 lines of bdev), which cannot be improved by defragging.
+
+origin
+
+PRELOAD_TASK=boot DATE=Wed Aug 23 10:24:07 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 34.69 17.26
+GUI  94.68 47.68
+PRELOAD_TASK=boot DATE=Wed Aug 23 10:50:17 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 35.83 17.22
+GUI  96.01 47.81
+
+preload
+
+PRELOAD_TASK=boot DATE=Wed Aug 23 10:54:47 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 41.10 22.10
+GUI  68.83 24.20
+PRELOAD_TASK=boot DATE=Wed Aug 23 11:57:10 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 40.09 19.89
+GUI  66.97 22.10
+
+defrag-aged (on my aged/congested debian root filesystem)
+
+PRELOAD_TASK=boot DATE=Wed Aug 23 16:18:01 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 38.52 19.53
+GUI  69.13 23.39
+PRELOAD_TASK=boot DATE=Wed Aug 23 16:21:38 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 36.42 17.36
+GUI  65.42 20.99
+
+defrag-fresh (after I created blank groups by resize2fs shrink/grow)
+
+PRELOAD_TASK=boot DATE=Thu Aug 24 08:43:56 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
+SYSV 38.18 15.36
+GUI  68.04 17.91
+PRELOAD_TASK=boot DATE=Thu Aug 24 14:48:33 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i6
+86 GNU/Linux                                                                                                            SYSV 38.86 18.40
+GUI  66.92 20.68
