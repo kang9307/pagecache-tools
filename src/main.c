@@ -55,7 +55,7 @@ main (int argc, char* argv[])
 
   if (ioprio_set(IOPRIO_WHO_PROCESS, getpid(), 7 | IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT) == -1) {
       perror("ioprio_set");
-      return -1;
+      /* return -1; */
   }
 
   pagesize = getpagesize ();
