@@ -1,3 +1,2 @@
 - add CachedFile#sequential?
 - do not preload large sequential accessed files
-- move init.d scripts into debian/ suse/ dirs 
