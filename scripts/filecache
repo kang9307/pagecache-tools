@@ -110,10 +110,14 @@ class CachedFile
   attr_accessor :dev,  :ino, :size, :state, :refcnt
 
   def initialize(file)
-    @file = file
-    @seq  = @@seq
-    @@seq = @@seq + 1
-    @pages = Hash.new
+    @file    = file
+
+    @cached  = nil
+    @cachedp = nil
+    @pages   = Hash.new
+
+    @seq     = @@seq
+    @@seq    = @@seq + 1
   end
 
   def init_pages
@@ -144,18 +148,28 @@ class CachedFile
     @size = (stat.size + 1023) / 1024
   end
 
-  def cached
-    4 * @pages.size    # TODO: respect PAGE_SIZE
+  def cachedp=(percent)
+    @cachedp = percent
   end
 
-  def cached_percent
+  def cached=(pages)
+    @cached = pages
+  end
+
+  def cached
+    @cached || 4 * @pages.size    # TODO: respect PAGE_SIZE
+  end
+
+  def cachedp
+    return @cachedp if @cachedp
+
     if @size > 0
-      percent = (self.cached / @size.to_f).to_i
-      percent = 100 if percent > 100
+      @cachedp = (self.cached / @size.to_f).to_i
+      @cachedp = 100 if @cachedp > 100
     else
-      percent = 0
+      @cachedp = 0
     end
-    percent
+    @cachedp
   end
 
   def blockdev?()  @dev == $BDEV_ID  end
@@ -291,7 +305,9 @@ class CachedFileList
     read_filecache_index filecache
 
     @cfile_by_name.each_value do |cfile|
-      cfile.init_pages { |idx, len, state, refcnt| eval condition }
+      if cfile.cached > 0 
+        cfile.init_pages { |idx, len, state, refcnt| eval condition }
+      end
     end
 
     self
@@ -333,12 +349,14 @@ class CachedFileList
         next unless File.file?(file)
       end
 
-      cfile        = CachedFile.new file
-      cfile.dev    = dev
-      cfile.state  = state
-      cfile.ino    = ino.to_i
-      cfile.size   = size.to_i
-      cfile.refcnt = refcnt.to_i
+      cfile         = CachedFile.new file
+      cfile.dev     = dev
+      cfile.state   = state
+      cfile.ino     = ino.to_i
+      cfile.size    = size.to_i
+      cfile.cached  = cached.to_i
+      cfile.cachedp = cachedp.to_i
+      cfile.refcnt  = refcnt.to_i
       @cfile_by_name[file] = cfile
     end # filecache.each_line
   end
