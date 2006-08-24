@@ -388,7 +388,6 @@ class CachedFileList
   def dump(dir)
     fds = Hash.new
 
-    @cfile_by_name.delete_if { |key, cfile| cfile.empty? }
     @cfile_by_name.values.sort { |x,y| x.seq <=> y.seq} .each do |cfile|
       fs = @@fstab[cfile.dev]
       next unless fs
