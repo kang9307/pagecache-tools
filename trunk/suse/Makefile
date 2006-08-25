@@ -26,10 +26,10 @@ disable-bootcache:
 
 disable-preload:
 	chmod -x /usr/sbin/bootcache
-	insserv -r preload
-	insserv -r preload_early
+	insserv -r boot.preload
+	insserv -r boot.preload_early
 
 enable-preload:
 	chmod +x /usr/sbin/bootcache
-	insserv preload
-	insserv preload_early
+	insserv boot.preload
+	insserv boot.preload_early
