@@ -11,7 +11,8 @@
 PATH=/sbin:/bin
 
 CACHE_ROOT=/var/cache/bootcache
-.  /etc/default/bootcache
+# .  /etc/default/bootcache
+.  /etc/init.d/bootcache-timing.sh
 
 case "$1" in
 	start)
@@ -19,6 +20,8 @@ case "$1" in
 		[ -n "$PRELOAD_TASK" ] || exit 0
 		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
 
+		wait_for_process_start udevd
+		sleep 1
 		bootcache preload $PRELOAD_TASK &
 		;;
 	stop)
