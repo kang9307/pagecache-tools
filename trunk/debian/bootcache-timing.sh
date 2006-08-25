@@ -18,12 +18,12 @@ CACHE_ROOT=/var/cache/bootcache
 
 function wait_for_process_start()
 {
-    until pidof $1 > /dev/null; do sleep 1; done
+    until pidof $1 > /dev/null; do sleep 0.1; done
 }
 
 function wait_for_process_stop()
 {
-    while pidof $1 > /dev/null; do sleep 1; done
+    while pidof $1 > /dev/null; do sleep 0.1; done
 }
 
 function wait_for_process()
