@@ -448,9 +448,14 @@ opts = OptionParser.new do |opts|
     filecache.each_line { |line| puts line }
   end
 
-  opts.on('-D', '--drop WHAT',
+  opts.on('-D', '--drop [WHAT]',
                 'drop cached data or metadata.') do |what|
-    CachedFile.filecache.syswrite what
+    if what == nil or what == 'data'
+      CachedFile.filecache.syswrite "drop data"
+    end
+    if what == nil or what == 'metadata'
+      CachedFile.filecache.syswrite "drop metadata"
+    end
   end
 
   opts.on('-s', '--snapshot [CONDITION]',
