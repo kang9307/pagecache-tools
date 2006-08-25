@@ -1,0 +1,11 @@
+--- boot.udev.orig	2006-08-24 17:47:57.000000000 +0800
++++ boot.udev	2006-08-24 17:44:53.000000000 +0800
+@@ -3,7 +3,7 @@
+ ### BEGIN INIT INFO
+ # Provides:          boot.udev
+ # Required-Start:    boot.proc
+-# Should-Start:      boot.preload_early
++# Should-Start:      boot.preload_early bootcache-preload
+ # Default-Start:     B
+ # Default-Stop:
+ # Description:       Start udevd to manage /dev and kernel events.

@@ -1,7 +1,7 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          bootcache-preload
-# Required-Start:    
+# Required-Start:    boot.rootfsck
 # Required-Stop:
 # Default-Start:     B
 # Default-Stop:
