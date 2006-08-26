@@ -98,6 +98,7 @@ function setup_queue
         ELEVATORS="$ELEVATORS $oelv"
         echo deadline   >   $queue/scheduler
         echo 0          >   $queue/iosched/read_expire
+        echo 8          >   $queue/iosched/fifo_batch
         echo 10240      >   $queue/nr_requests
     done
 }
