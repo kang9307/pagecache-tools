@@ -2,7 +2,8 @@
 
 VERBOSE=0
 CACHE_ROOT=/var/cache/bootcache
-. /etc/default/bootcache
+# . /etc/default/bootcache
+. /etc/init.d/bootcache-timing.sh ''
 
 FILECACHE="filecache --verbose $VERBOSE"
 
@@ -238,11 +239,6 @@ function do_clear()
 {
     rm -fr "$TASK_ROOT"
     do_habitat_dir rmdir
-}
-
-function wait_for_process_stop()
-{
-    while pidof $1 > /dev/null; do sleep 1; done
 }
 
 case "$1" in
