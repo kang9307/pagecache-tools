@@ -147,12 +147,13 @@ do_ra_task (struct RA_task* task)
             }
           pages = pages->next;
 
-	  if (!strncmp(task->filename, "/dev/", 5))
-		  printf("#");
-	  else
-		  printf(".");
-	  fflush(stdout);
         }
+
+      if (!strncmp(task->filename, "/dev/", 5))
+	      printf("%%");
+      else
+	      printf(".");
+      fflush(stdout);
 
   close(fd);
 }
