@@ -508,6 +508,24 @@ opts = OptionParser.new do |opts|
     $cfiles.delete_if { |f| eval condition }
   end
 
+  opts.on('--complete PERCENT', 'complete to full file if cachedp > PERCENT') do |percent|
+    cachedp = percent.to_i
+
+    $cfiles.each do |f|
+
+      if f.file =~ /(sbin|bin|lib)/
+        scale = 2
+      else
+        scale = 1
+      end
+
+      if scale * f.cached * 100 > f.size * cachedp
+        f.add_page_range(0, (f.size + 3) / 4)
+      end
+
+    end
+  end
+
   opts.on('--account', 'show some accounting numbers') do
     files = 0
     size = 0
