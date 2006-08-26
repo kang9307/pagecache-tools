@@ -126,6 +126,9 @@ function do_preload
     [ -x /usr/bin/renice ] && /usr/bin/renice 19 $$ > /dev/null
     [ -x /usr/bin/ionice ] && /usr/bin/ionice -c3 -p$$
 
+    wait_for_process_start udevd
+    sleep 1
+
     readahead-fs -t 1 "$PRELOAD_ROOT/bdev" &
 
     local devs=`cd "$PRELOAD_ROOT"; echo *`
