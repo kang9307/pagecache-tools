@@ -12,7 +12,7 @@ PATH=/sbin:/bin
 
 CACHE_ROOT=/var/cache/bootcache
 # .  /etc/default/bootcache
-.  /etc/init.d/bootcache-timing.sh
+.  /etc/init.d/bootcache-timing.sh ''
 
 case "$1" in
 	start)
