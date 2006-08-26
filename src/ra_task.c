@@ -1,6 +1,6 @@
 #include "ra_task.h"
 #include "fadvise.h"
-#include <nptl/pthread.h>
+#include <pthread.h>
 
 
 extern int pagesize;
