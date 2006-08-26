@@ -17,19 +17,23 @@ uninstall:
 	rm -f ${ROOT}/etc/default/bootcache
 
 enable-bootcache:
+	chmod +x /sbin/bootcache
 	insserv bootcache-preload.sh
 	insserv bootcache-timing.sh
 
 disable-bootcache:
+	chmod -x /sbin/bootcache
 	insserv -r bootcache-preload.sh
 	insserv -r bootcache-timing.sh
 
 disable-preload:
 	chmod -x /usr/sbin/bootcache
+	chmod -x /sbin/preload
 	insserv -r boot.preload
 	insserv -r boot.preload_early
 
 enable-preload:
 	chmod +x /usr/sbin/bootcache
-	insserv boot.preload
+	chmod +x /sbin/preload
 	insserv boot.preload_early
+	insserv boot.preload
