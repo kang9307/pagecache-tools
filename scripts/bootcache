@@ -56,6 +56,7 @@ function do_stop()
                     --dump "$SNAPSHOT_ROOT/stop" \
                     --difference "$SNAPSHOT_ROOT/start" \
                     --prune-path '^(/var/|/tmp/)' \
+                    --complete 80 \
                     --dump "$PRELOAD_ROOT"
 }
 
