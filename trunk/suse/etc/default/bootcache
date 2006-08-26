@@ -33,6 +33,7 @@ PRELOAD_TASK=boot
 # 		start - wait for the named process to appear
 # 		stop  - wait for the named process to quit
 UPTIME_LOG_TIMING='wait_for_process ksplashx start stop'
+UPTIME_LOG_TIMING='wait_for_process konsole start'
 
 # The timing commands for cache footprint snapshoting.
 #
@@ -45,3 +46,4 @@ UPTIME_LOG_TIMING='wait_for_process ksplashx start stop'
 # 		yyyM - the absolute value of megabyte
 # CACHE_SNAPSHOT_TIMING='memory_above_any 80% 300M'
 CACHE_SNAPSHOT_TIMING='wait_for_process ksplashx start stop; sleep 5'
+CACHE_SNAPSHOT_TIMING='wait_for_process konsole start; sleep 5'
