@@ -129,7 +129,7 @@ function do_preload
     wait_for_process_start udevd
     sleep 1
 
-    readahead-fs -t 1 "$PRELOAD_ROOT/bdev" &
+    readahead-fs -t 5 "$PRELOAD_ROOT/bdev" &
 
     local devs=`cd "$PRELOAD_ROOT"; echo *`
 
@@ -147,7 +147,7 @@ function do_preload
                 sleep $i
             done
 
-            [ $i != 10 ] && readahead-fs -t 50 "$file"
+            [ $i != 10 ] && readahead-fs -t 200 "$file"
         )&
     done
 }
