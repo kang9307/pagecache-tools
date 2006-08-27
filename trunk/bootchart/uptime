@@ -1,11 +1,121 @@
-The following are the uptime numbers, though not a strict one-to-one map to the
-bootchart pictures. It shows about 30% speed improvement.
+SUMMARY
+=======
 
-It seems that the defragger reduced a little SYSV boot time, and some idle
-time. However the GUI boot time is not affected. It's weird, maybe there are
-too much stats(~2000 lines of bdev), which cannot be improved by defragging.
+Debian: saved 28.5% time
 
-origin
+	plain		95
+	preload		68
+
+SUSE: preload/bootcache are pure overheads!
+
+	plain		49
+	preload		60
+	bootcache	50-60
+
+CONCLUSION
+==========
+
+- the defragger reduced _little_ SYSV/GUI boot time and idle time, if any.
+	- 2000 files defragged, and packed together(confirmed by dumpe2fs)
+	- not visited quite in sequence, for the readahead thread number is
+	  currently limited because of LOCK CONTENTION
+	- many file stat(~2000 lines of bdev), which cannot be improved by
+	  defragging
+- the readahead threads still hinder legacy apps somehow
+	- not noticable in debian, becomes obvious in SUSE
+	- delayed mainly by locks instead of I/O waiting, see LOCK CONTENTION
+	- the I/O elevator is good enough, though can be further improved for the
+	  case of parallel booting employed by SUSE
+
+LOCK CONTENTION
+===============
+
+Idealy, readahead-fs threads should be waiting for I/O completion in the most time:
+
+wfg ~% ps -C readahead-fs m -o pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,wchan:14,comm
+  PID   TID CLS RTPRIO  NI PRI PSR %CPU STAT WCHAN          COMMAND
+ 9413     - -        -   -   -   -  1.2 -    -              readahead-fs
+    -  9413 TS       -   0  24   0  0.1 Sl+  futex_wait     -
+    -  9448 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9462 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9485 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9500 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9506 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9520 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9524 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9528 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9544 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9552 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9569 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9588 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9595 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9600 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9611 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+
+However most times we get the following:
+
+  PID   TID CLS RTPRIO  NI PRI PSR %CPU STAT WCHAN          COMMAND
+ 9620     - -        -   -   -   -  1.2 -    -              readahead-fs
+    -  9620 TS       -   0  24   0  0.0 Dl+  get_request_wa -
+    -  9621 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9622 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9623 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9624 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9625 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9626 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9627 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9628 TS       -   0  21   0  0.0 Dl+  get_request_wa -
+    -  9629 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9630 TS       -   0  21   0  0.0 Dl+  get_request_wa -
+    -  9631 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9632 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9633 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9634 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9635 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9636 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9637 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9638 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9639 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9640 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9641 TS       -   0  21   0  0.0 Dl+  sync_buffer    -
+    -  9642 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+    -  9643 TS       -   0  21   0  0.0 Dl+  real_lookup    -
+...(check more data in ps-readahead-fs.bz2)
+
+We get a better idea of the problem from the callstack of open()/stat():
+
+[<c01616c8>] sync_buffer+0x60/0x77               [<c01616c8>] sync_buffer+0x60/0x77
+[<c03acbf6>] __wait_on_bit+0x58/0x61             [<c03acbf6>] __wait_on_bit+0x58/0x61
+[<c03acc7f>] out_of_line_wait_on_bit+0x80/0x88   [<c03acc7f>] out_of_line_wait_on_bit+0x80/0x88
+[<c016175a>] __wait_on_buffer+0x31/0x33          [<c016175a>] __wait_on_buffer+0x31/0x33  <= wait I/O
+[<c01ae0a5>] ext3_find_entry+0x16c/0x3d4         [<c01ae0a5>] ext3_find_entry+0x16c/0x3d4
+[<c01ae57d>] ext3_lookup+0x3c/0xe4               [<c01ae57d>] ext3_lookup+0x3c/0xe4
+[<c016e214>] real_lookup+0xb5/0xd4               [<c016e214>] real_lookup+0xb5/0xd4  <= acquire mutex
+[<c016e4c4>] do_lookup+0x94/0x9f                 [<c016e4c4>] do_lookup+0x94/0x9f
+[<c016ec66>] __link_path_walk+0x797/0xe56        [<c016ec66>] __link_path_walk+0x797/0xe56
+[<c016f369>] link_path_walk+0x44/0xba            [<c016f369>] link_path_walk+0x44/0xba
+[<c016f6b8>] do_path_lookup+0xe2/0x240           [<c016f6b8>] do_path_lookup+0xe2/0x240
+[<c016f873>] __path_lookup_intent_open+0x42/0x7a [<c016fb3b>] __user_walk_fd+0x48/0x5d
+[<c016f8e0>] path_lookup_open+0x35/0x39          [<c0169dfb>] vfs_stat_fd+0x22/0x59
+[<c017019f>] open_namei+0x83/0x6f8               [<c0169e52>] vfs_stat+0x20/0x24
+[<c015f53e>] do_filp_open+0x3c/0x58              [<c016a530>] sys_stat64+0x1b/0x37
+[<c015f8ae>] do_sys_open+0x60/0x109              [<c0102cd3>] syscall_call+0x7/0xb
+[<c015f97e>] sys_open+0x27/0x2b
+[<c0102cd3>] syscall_call+0x7/0xb
+
+dir->i_mutex will be aquired in real_lookup(), and ext3_find_entry() will
+indirectly call sync_buffer() and sleep on I/O with that.  That will block all
+following open()/stat() syscalls on the same dir. It is a big obstacle to
+parallel readahead. The legacy apps will be blocked on the mutex, never have a
+chance to tell the block layer: hey, I want this block, schedule it _ASAP_. And
+the mutex holder is one of the readahead threads, which do not enjoy any I/O
+priority!
+
+
+Debian uptime
+=============
+
+plain
 
 PRELOAD_TASK=boot DATE=Wed Aug 23 10:24:07 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 GNU/Linux
 SYSV 34.69 17.26
@@ -40,3 +150,38 @@ GUI  68.04 17.91
 PRELOAD_TASK=boot DATE=Thu Aug 24 14:48:33 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i6
 86 GNU/Linux                                                                                                            SYSV 38.86 18.40
 GUI  66.92 20.68
+
+
+SUSE uptime
+===========
+
+plain
+
+PRELOAD_TASK=boot DATE=Thu Aug 24 17:27:38 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 20.26 6.56
+GUI  48.92 15.42
+PRELOAD_TASK= DATE=Fri Aug 25 18:16:26 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #12 SMP Fri Aug 25 14:55:57 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 20.27 6.37
+GUI  49.11 13.64
+
+preload
+
+from bootchart: 63s; 57s
+
+bootcache
+
+PRELOAD_TASK=boot DATE=Thu Aug 24 18:30:09 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #51 SMP Sat Aug 19 08:34:20 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 39.18 19.44
+GUI  59.38 25.16
+PRELOAD_TASK=boot DATE=Fri Aug 25 17:33:03 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #12 SMP Fri Aug 25 14:55:57 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 33.82 15.11
+GUI  52.44 17.59
+
+defrag
+
+PRELOAD_TASK=boot DATE=Fri Aug 25 18:30:17 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #12 SMP Fri Aug 25 14:55:57 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 32.12 14.41
+GUI  50.97 15.31
+PRELOAD_TASK=boot DATE=Sat Aug 26 08:12:38 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #15 SMP Fri Aug 25 19:46:34 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 38.86 21.50
+GUI  51.83 22.76
