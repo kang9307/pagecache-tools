@@ -17,7 +17,7 @@ case "$1" in
 	start)
 		[ -n "$PRELOAD_TASK" ] || exit 0
 		[ -d "$CACHE_ROOT/$PRELOAD_TASK/preload" ] || exit 0
-		grep -q '\<(nopreload|single|1)\>' /proc/cmdline && exit 0
+		grep -Eq '\<(nopreload|single|1)\>' /proc/cmdline && exit 0
 
 		bootcache preload $PRELOAD_TASK &
 		;;
