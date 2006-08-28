@@ -1,5 +1,21 @@
+This new series of numbers are to evaluate the new bootcache performance,
+whose lock contention in real_lookup() being bypassed by using iopen.
+
+With iopen, we are able to reach the next contention case in get_request_wait(),
+which is demonstrated vividly in file ps-readahead-fs.iopen.bz2
+
+The plain/preload numbers have also been recollected according to valuable
+advices from my mentor, Lubos Lunak:
+	- disable zmd
+		# insserv -r novell-zmd
+	- avoid preload invocations in plain/bootcache cases
+		# chmod -x /sbin/preload
+
+So the new numbers are expected to more reliable and accurate :-)
+
 plain
 
+# ok, don't believe PRELOAD_TASK for now ;)
 PRELOAD_TASK=boot DATE=Mon Aug 28 21:42:56 CST 2006 KERNEL=Linux lark 2.6.16.13-4-default #1 Wed May 3 04:53:23 UTC 2006 i686 athlon i386 GNU/Linux
 SYSV 16.54 7.12
 GUI  40.96 17.92
