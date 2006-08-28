@@ -1,0 +1,32 @@
+plain
+
+PRELOAD_TASK=boot DATE=Mon Aug 28 21:42:56 CST 2006 KERNEL=Linux lark 2.6.16.13-4-default #1 Wed May 3 04:53:23 UTC 2006 i686 athlon i386 GNU/Linux
+SYSV 16.54 7.12
+GUI  40.96 17.92
+# the new kernel defaults to read_expire=200, which seems to be suboptimal
+PRELOAD_TASK=boot DATE=Mon Aug 28 21:51:00 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #25 SMP Mon Aug 28 09:17:05 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 19.98 6.27
+GUI  43.21 14.37
+PRELOAD_TASK=boot DATE=Mon Aug 28 22:12:56 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #25 SMP Mon Aug 28 09:17:05 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 19.91 6.75
+GUI  42.45 14.43
+
+bootcache with iopen
+
+PRELOAD_TASK=boot DATE=Mon Aug 28 21:56:51 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #25 SMP Mon Aug 28 09:17:05 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 27.98 11.56
+GUI  43.67 12.66
+# after resetting read_expire=500 I get this:
+PRELOAD_TASK=boot DATE=Mon Aug 28 22:07:22 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #25 SMP Mon Aug 28 09:17:05 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 27.15 11.67
+GUI  39.87 13.26
+
+preload
+
+PRELOAD_TASK=boot DATE=Mon Aug 28 22:22:54 CST 2006 KERNEL=Linux lark 2.6.18-rc4 #25 SMP Mon Aug 28 09:17:05 CST 2006 i686 athlon i386 GNU/Linux
+SYSV 22.36 7.73
+GUI  41.14 12.38
+PRELOAD_TASK=boot DATE=Mon Aug 28 22:34:29 CST 2006 KERNEL=Linux lark 2.6.16.13-4-default #1 Wed May 3 04:53:23 UTC 2006 i686 athlon i386 GNU/Linux
+SYSV 20.27 9.10
+GUI  42.65 17.54
+
