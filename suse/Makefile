@@ -24,7 +24,7 @@ enable-bootcache:
 disable-bootcache:
 	chmod -x /sbin/bootcache
 	insserv -r bootcache-preload.sh
-	insserv -r bootcache-timing.sh
+	#insserv -r bootcache-timing.sh
 
 disable-preload:
 	chmod -x /usr/sbin/bootcache
