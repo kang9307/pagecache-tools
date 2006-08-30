@@ -149,7 +149,7 @@ function do_preload
                 sleep $i
             done
 
-            [ $i != 10 ] && readahead-fs -t 200 "$file"
+            [ $i != 10 ] && readahead-fs -t 300 "$file"
         )&
     done
 }
