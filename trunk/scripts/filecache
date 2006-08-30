@@ -93,6 +93,8 @@ end
 #
 class CachedFile
 
+  @@fstab = FSTab.new '/etc/mtab'
+
   def CachedFile.reset_seq
     @@seq = 0
   end
@@ -214,7 +216,11 @@ class CachedFile
   end
 
   def to_s
-    s = "#{@file}\n"
+    if @dev == $BDEV_ID
+      s = "#{@file}\n"
+    else
+      s = "#{@@fstab[@dev].mount_point}/.inode/#{@ino}\n"
+    end
     page_ranges.each { |span| s << "#{span[0]}\t#{span[1]}\n" }
     s << "\n"
   end
