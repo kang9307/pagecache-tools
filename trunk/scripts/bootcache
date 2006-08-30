@@ -99,6 +99,7 @@ function setup_queue
         echo deadline   >   $queue/scheduler
         echo 0          >   $queue/iosched/read_expire
         echo 8          >   $queue/iosched/fifo_batch
+        echo 64         >   $queue/iosched/seek_dist
         echo 10240      >   $queue/nr_requests
     done
 }
