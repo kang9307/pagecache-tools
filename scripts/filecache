@@ -216,7 +216,7 @@ class CachedFile
   end
 
   def to_s
-    if @dev == $BDEV_ID
+    if @dev == $BDEV_ID or @@fstab[@dev].fstype != 'ext3'
       s = "#{@file}\n"
     else
       s = "#{@@fstab[@dev].mount_point}/.inode/#{@ino}\n"
