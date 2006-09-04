@@ -1,3 +1,6 @@
+BACKGROUND
+==========
+
 This new series of numbers are to evaluate the new bootcache performance,
 whose lock contention in real_lookup() being bypassed by using iopen.
 
@@ -12,6 +15,29 @@ advices from my mentor, Lubos Lunak:
 		# chmod -x /sbin/preload
 
 So the new numbers are expected to more reliable and accurate :-)
+
+
+SUMMARY
+=======
+
+The numbers show that bootcache/preload helped little the boot time.
+
+                      SYSV                   GUI
+		----------------       ----------------
+plain           18.81       6.71       42.21      15.57 
+preload         21.31       8.41       41.89      14.96 
+bootcache       27.56      11.62       41.77      12.96 
+
+However, the situation can be made better for bootcache:
+- the bootcharts show that bootcache reduces most iowaits on KDE startup,
+  which means that any future improvement on KDE's cpu utilization will
+  contribute directly to startup time.
+- bootcache still suffers from a remaining lock contention problem, the
+  solution of which should bring the SYSV boot time back to a sane value.
+
+
+SUSE uptime
+===========
 
 plain
 
