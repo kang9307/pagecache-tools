@@ -1,7 +1,7 @@
 #ifndef __THREAD_POOL_H__
 #define __THREAD_POOL_H__
 
-#include <nptl/pthread.h>
+#include <pthread.h>
 
 
 #define TP_TASK_DATA_MASK 0x00000000
