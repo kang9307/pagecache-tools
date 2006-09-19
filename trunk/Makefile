@@ -6,7 +6,7 @@ install: src/readahead-fs
 	install -m 755 -s src/readahead-fs		${ROOT}/sbin/
 	install -m 755 scripts/bootcache		${ROOT}/sbin/
 	install -m 755 scripts/filecache		${ROOT}/usr/sbin/
-	cp -a /dev/hd* /dev/sd* /mnt/debian/lib/udev/devices/
+	cp -a /dev/[shm]d* /lib/udev/devices/
 
 uninstall:
 	rm -fr /var/cache/bootcache
