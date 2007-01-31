@@ -543,8 +543,8 @@ opts = OptionParser.new do |opts|
       cached = cached + f.cached
       ranges = ranges + f.page_ranges.size
     end
-    printf "total  %3d MiB in %5d\tfiles\n", size >> 10, files
-    printf "cached %3d MiB in %5d\tranges\n", cached >> 10, ranges
+    printf "total  %8d MiB in %8d\tfiles\n", size >> 10, files
+    printf "cached %8d MiB in %8d\tranges\n", cached >> 10, ranges
   end
 
   opts.on('--defrag HABITAT', 'do poor man\'s defrag via dir HABITAT.') do |habitat|
