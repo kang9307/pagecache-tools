@@ -278,7 +278,7 @@
  ----------------------------
 --- /dev/null
 +++ linux-2.6.20-rc3-mm1/fs/proc/filecache.c
-@@ -0,0 +1,798 @@
+@@ -0,0 +1,797 @@
 +/*
 + * linux/fs/proc/filecache.c
 + *
@@ -711,7 +711,6 @@
 +	{1 << PG_writeback,	"W:writeback"},
 +
 +	{1 << PG_MMAP,		"M:mmap"},
-+	{1 << PG_PARTIAL,	"P:partial"}, /* FIXME */
 +
 +};
 +
