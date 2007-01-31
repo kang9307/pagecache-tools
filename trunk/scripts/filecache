@@ -322,12 +322,12 @@ class CachedFileList
   # get the cached file list from /proc/filecache.
   def read_filecache_index(filecache)
     CachedFile.reset_seq
-    filecache.syswrite('index')
+    filecache.syswrite('')
     filecache.rewind
     filecache.each_line do |line|
       next if line[0] == ?#
 
-      ino, size, cached, cachedp, state, refcnt, dev, file = line.split
+      ino, size, cached, cachedp, refcnt, state, visitcnt, uid, process, dev, file = line.split
 
       next if file == '(noname)'
       if file.include? ?\\
@@ -449,7 +449,7 @@ opts = OptionParser.new do |opts|
   opts.on('-q', '--query [FILE]',
                 'query cached pages of FILE in /proc/filecache.') do |file|
     filecache = CachedFile.filecache
-    filecache.syswrite(file || 'index')
+    filecache.syswrite(file || '')
     filecache.rewind
     filecache.each_line { |line| puts line }
   end
