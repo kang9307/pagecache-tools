@@ -216,11 +216,11 @@ class CachedFile
   end
 
   def to_s
-    if @dev == $BDEV_ID or @@fstab[@dev].fstype != 'ext3'
+    # if @dev == $BDEV_ID or @@fstab[@dev].fstype != 'ext3'
       s = "#{@file}\n"
-    else
-      s = "#{@@fstab[@dev].mount_point}/.inode/#{@ino}\n"
-    end
+    # else
+    #   s = "#{@@fstab[@dev].mount_point}/.inode/#{@ino}\n"
+    # end
     page_ranges.each { |span| s << "#{span[0]}\t#{span[1]}\n" }
     s << "\n"
   end
