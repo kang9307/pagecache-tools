@@ -1,0 +1,1478 @@
+--- linux-2.6.20-rc3-mm1.orig/include/linux/mm.h
++++ linux-2.6.20-rc3-mm1/include/linux/mm.h
+@@ -29,6 +29,7 @@ extern unsigned long num_physpages;
+ extern void * high_memory;
+ extern unsigned long vmalloc_earlyreserve;
+ extern int page_cluster;
++extern char * const zone_names[];
+ 
+ #ifdef CONFIG_SYSCTL
+ extern int sysctl_legacy_va_layout;
+--- linux-2.6.20-rc3-mm1.orig/mm/page_alloc.c
++++ linux-2.6.20-rc3-mm1/mm/page_alloc.c
+@@ -86,7 +86,7 @@ int sysctl_lowmem_reserve_ratio[MAX_NR_Z
+ 
+ EXPORT_SYMBOL(totalram_pages);
+ 
+-static char * const zone_names[MAX_NR_ZONES] = {
++char * const zone_names[MAX_NR_ZONES] = {
+ #ifdef CONFIG_ZONE_DMA
+ 	 "DMA",
+ #endif
+--- linux-2.6.20-rc3-mm1.orig/fs/dcache.c
++++ linux-2.6.20-rc3-mm1/fs/dcache.c
+@@ -1776,7 +1776,10 @@ static char * __d_path( struct dentry *d
+ 
+ 		if (dentry == root && vfsmnt == rootmnt)
+ 			break;
+-		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
++		if (unlikely(!vfsmnt)) {
++			if (IS_ROOT(dentry))
++				break;
++		} else if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
+ 			/* Global root? */
+ 			spin_lock(&vfsmount_lock);
+ 			if (vfsmnt->mnt_parent == vfsmnt) {
+--- linux-2.6.20-rc3-mm1.orig/fs/seq_file.c
++++ linux-2.6.20-rc3-mm1/fs/seq_file.c
+@@ -13,6 +13,8 @@
+ #include <asm/uaccess.h>
+ #include <asm/page.h>
+ 
++#define SEQFILE_SHOW_NEXT	LONG_MAX
++
+ /**
+  *	seq_open -	initialize sequential file
+  *	@file: file we initialize
+@@ -53,6 +55,16 @@ int seq_open(struct file *file, const st
+ }
+ EXPORT_SYMBOL(seq_open);
+ 
++int seq_open_private(struct file *file, struct seq_operations *op, void *data)
++{
++	int ret = seq_open(file, op);
++
++	if (!ret)
++		((struct seq_file *)file->private_data)->private = data;
++
++	return ret;
++}
++EXPORT_SYMBOL(seq_open_private);
+ /**
+  *	seq_read -	->read() method for sequential files.
+  *	@file: the file to read from
+@@ -93,6 +105,7 @@ ssize_t seq_read(struct file *file, char
+ 	/* if not empty - flush it first */
+ 	if (m->count) {
+ 		n = min(m->count, size);
++		BUG_ON(m->from == SEQFILE_SHOW_NEXT);
+ 		err = copy_to_user(buf, m->buf + m->from, n);
+ 		if (err)
+ 			goto Efault;
+@@ -102,7 +115,7 @@ ssize_t seq_read(struct file *file, char
+ 		buf += n;
+ 		copied += n;
+ 		if (!m->count)
+-			m->index++;
++			m->from = SEQFILE_SHOW_NEXT;
+ 		if (!size)
+ 			goto Done;
+ 	}
+@@ -113,9 +126,11 @@ ssize_t seq_read(struct file *file, char
+ 		err = PTR_ERR(p);
+ 		if (!p || IS_ERR(p))
+ 			break;
+-		err = m->op->show(m, p);
+-		if (err)
+-			break;
++		if (m->from != SEQFILE_SHOW_NEXT) {
++			err = m->op->show(m, p);
++			if (err)
++				break;
++		}
+ 		if (m->count < m->size)
+ 			goto Fill;
+ 		m->op->stop(m, p);
+@@ -156,7 +171,7 @@ Fill:
+ 	if (m->count)
+ 		m->from = n;
+ 	else
+-		pos++;
++		m->from = SEQFILE_SHOW_NEXT;
+ 	m->index = pos;
+ Done:
+ 	if (!copied)
+@@ -208,11 +223,9 @@ static int traverse(struct seq_file *m, 
+ 		}
+ 		pos += m->count;
+ 		m->count = 0;
+-		if (pos == offset) {
+-			m->index++;
+-			break;
+-		}
+ 		p = m->op->next(m, p, &m->index);
++		if (pos == offset)
++			break;
+ 	}
+ 	m->op->stop(m, p);
+ 	return error;
+--- linux-2.6.20-rc3-mm1.orig/fs/proc/base.c
++++ linux-2.6.20-rc3-mm1/fs/proc/base.c
+@@ -380,7 +380,7 @@ static int mounts_open(struct inode *ino
+ 
+ 	if (ns) {
+ 		ret = -ENOMEM;
+-		p = kmalloc(sizeof(struct proc_mounts), GFP_KERNEL);
++		p = kzalloc(sizeof(struct proc_mounts), GFP_KERNEL);
+ 		if (p) {
+ 			file->private_data = &p->m;
+ 			ret = seq_open(file, &mounts_op);
+--- linux-2.6.20-rc3-mm1.orig/include/linux/seq_file.h
++++ linux-2.6.20-rc3-mm1/include/linux/seq_file.h
+@@ -32,6 +32,7 @@ struct seq_operations {
+ };
+ 
+ int seq_open(struct file *, const struct seq_operations *);
++int seq_open_private(struct file *, struct seq_operations *, void *);
+ ssize_t seq_read(struct file *, char __user *, size_t, loff_t *);
+ loff_t seq_lseek(struct file *, loff_t, int);
+ int seq_release(struct inode *, struct file *);
+--- linux-2.6.20-rc3-mm1.orig/fs/nfs/client.c
++++ linux-2.6.20-rc3-mm1/fs/nfs/client.c
+@@ -1209,17 +1209,7 @@ static struct file_operations nfs_volume
+  */
+ static int nfs_server_list_open(struct inode *inode, struct file *file)
+ {
+-	struct seq_file *m;
+-	int ret;
+-
+-	ret = seq_open(file, &nfs_server_list_ops);
+-	if (ret < 0)
+-		return ret;
+-
+-	m = file->private_data;
+-	m->private = PDE(inode)->data;
+-
+-	return 0;
++	return seq_open_private(file, &nfs_server_list_ops, PDE(inode)->data);
+ }
+ 
+ /*
+@@ -1300,17 +1290,7 @@ static int nfs_server_list_show(struct s
+  */
+ static int nfs_volume_list_open(struct inode *inode, struct file *file)
+ {
+-	struct seq_file *m;
+-	int ret;
+-
+-	ret = seq_open(file, &nfs_volume_list_ops);
+-	if (ret < 0)
+-		return ret;
+-
+-	m = file->private_data;
+-	m->private = PDE(inode)->data;
+-
+-	return 0;
++	return seq_open_private(file, &nfs_volume_list_ops, PDE(inode)->data);
+ }
+ 
+ /*
+--- linux-2.6.20-rc3-mm1.orig/Documentation/filesystems/proc.txt
++++ linux-2.6.20-rc3-mm1/Documentation/filesystems/proc.txt
+@@ -209,6 +209,7 @@ Table 1-3: Kernel info in /proc 
+  driver	     Various drivers grouped here, currently rtc (2.4)
+  execdomains Execdomains, related to security			(2.4)
+  fb	     Frame Buffer devices				(2.4)
++ filecache   Query/drop in-memory file cache
+  fs	     File system parameters, currently nfs/exports	(2.4)
+  ide         Directory containing info about the IDE subsystem 
+  interrupts  Interrupt usage                                   
+@@ -453,6 +454,88 @@ VmallocTotal: total size of vmalloc memo
+  VmallocUsed: amount of vmalloc area which is used
+ VmallocChunk: largest contigious block of vmalloc area which is free
+ 
++..............................................................................
++
++filecache:
++
++Provides access to the in-memory file cache.
++
++To list an index of all cached files:
++
++    echo -n index > /proc/filecache
++    cat /proc/filecache
++
++The output looks like:
++
++    # filecache 1.0
++    #      ino       size   cached cached%  state   refcnt  dev             file
++       1026334         91       92    100   --      66      03:02(hda2)     /lib/ld-2.3.6.so
++        233608       1242      972     78   --      66      03:02(hda2)     /lib/tls/libc-2.3.6.so
++         65203        651      476     73   --      1       03:02(hda2)     /bin/bash
++       1026445        261      160     61   --      10      03:02(hda2)     /lib/libncurses.so.5.5
++        235427         10       12    100   --      44      03:02(hda2)     /lib/tls/libdl-2.3.6.so
++
++FIELD	INTRO
++---------------------------------------------------------------------------
++ino	inode number
++size	inode size in KB
++cached	cached size in KB
++cached%	percent of file data cached
++state1	'-' clean; 'd' metadata dirty; 'D' data dirty
++state2	'-' unlocked; 'L' locked, normally indicates file being written out
++refcnt	file reference count, it's an in-kernel one, not exactly open count
++dev	major:minor numbers in hex, followed by a descriptive device name
++file	file path _inside_ the filesystem. There are several special names:
++	'(noname)':	the file name is not available
++	'(03:02)':	the file is a block device file of major:minor
++	'...(deleted)': the named file has been deleted from the disk
++
++To list the cached pages of a perticular file:
++
++    echo -n /bin/bash > /proc/filecache
++    cat /proc/filecache
++
++    # file /bin/bash
++    # flags R:referenced A:active U:uptodate D:dirty W:writeback M:mmap
++    # idx   len     state   refcnt
++    0       36      RAU__M  3
++    36      1       RAU__M  2
++    37      8       RAU__M  3
++    45      2       RAU___  1
++    47      6       RAU__M  3
++    53      3       RAU__M  2
++    56      2       RAU__M  3
++
++FIELD	INTRO
++----------------------------------------------------------------------------
++idx	page index
++len	number of pages which are cached and share the same state
++state	page state of the flags listed in line two
++refcnt	page reference count
++
++Careful users may notice that the file name to be queried is remembered between
++commands. Internally, the module has a global variable to store the file name
++parameter, so that it can be inherited by newly opened /proc/filecache file.
++However it can lead to interference for multiple queriers. The solution here
++is to obey a rule: only root can interactively change the file name parameter;
++normal users must go for scripts to access the interface. Scripts should do it
++by following the code example below:
++
++    filecache = open("/proc/filecache", "rw");
++    # avoid polluting the global parameter filename
++    filecache.write("private session");
++
++To instruct the kernel to drop clean caches, dentries and inodes from memory,
++causing that memory to become free:
++
++    # drop clean file data cache (i.e. file backed pagecache)
++    echo drop data > /proc/filecache
++
++    # drop clean file metadata cache (i.e. dentries and inodes)
++    echo drop metadata > /proc/filecache
++
++Note that the drop commands are non-destructive operations and dirty objects
++are not freeable, the user should run `sync' first.
+ 
+ 1.3 IDE devices in /proc/ide
+ ----------------------------
+--- /dev/null
++++ linux-2.6.20-rc3-mm1/fs/proc/filecache.c
+@@ -0,0 +1,798 @@
++/*
++ * linux/fs/proc/filecache.c
++ *
++ * Copyright (C) 2006 Fengguang Wu <wfg@ustc.edu>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/fs.h>
++#include <linux/mm.h>
++#include <linux/radix-tree.h>
++#include <linux/page-flags.h>
++#include <linux/pagevec.h>
++#include <linux/pagemap.h>
++#include <linux/vmalloc.h>
++#include <linux/writeback.h>
++#include <linux/proc_fs.h>
++#include <linux/seq_file.h>
++#include <linux/module.h>
++#include <asm/uaccess.h>
++
++/* Increase it whenever there are visible changes. */
++#define FILECACHE_VERSION	"1.0"
++
++/*
++ * Session management.
++ *
++ * Each opened /proc/filecache file is assiocated with a session object.
++ *
++ * session.query_file is the file whose cache info is to be queried.
++ * Its value determines what we get on read():
++ * 	- NULL: call inode_index_*() to show the index of cached inodes
++ * 	- filp: call page_ranges_*() to show the cached pages of filp
++ *
++ * session.query_file is
++ * 	- initialized from global_name on open();
++ * 	- updated on write("filename");
++ * 	  note that the new filename will also be saved in global_name if
++ * 	  session.private_session is false.
++ */
++
++struct session {
++	int		private_session;
++	struct file	*query_file;
++	pgoff_t		next_offset;
++	struct {
++		unsigned long cursor;
++		unsigned long origin;
++		unsigned long size;
++		struct inode **inodes;
++	} ivec;
++	struct {
++		unsigned long pos;
++		unsigned long i_state;
++		struct inode *inode;
++		struct inode *pinned_inode;
++	} icur;
++};
++
++#define IVEC_SIZE	(PAGE_SIZE / sizeof(struct inode *))
++#define CLOSE_SESSION	(char *)1
++static char *global_name;
++
++/*
++ * Session address is stored in proc_file->f_ra.flags:
++ * we assume that there will be no readahead for proc_file.
++ */
++static struct session *get_session(struct file *proc_file)
++{
++	return (struct session *)proc_file->f_ra.flags;
++}
++
++static void set_session(struct file *proc_file, struct session *s)
++{
++	BUG_ON(proc_file->f_ra.flags);
++	proc_file->f_ra.flags = (unsigned long)s;
++}
++
++static int session_update_file(struct session *s, char *name)
++{
++	static DEFINE_MUTEX(mutex);
++	int err = 0;
++
++	mutex_lock(&mutex);
++
++	/*
++	 * Close old file.
++	 */
++	if (s->query_file) {
++		err = filp_close(s->query_file, NULL);
++		if (err)
++			goto out;
++		s->query_file = NULL;
++	}
++
++	if (name == CLOSE_SESSION)
++		goto out;
++	if (name && name[0] == '\0')
++		name = NULL;
++
++	/*
++	 * Open the named file.
++	 */
++	if (name) {
++		s->query_file = filp_open(name, O_RDONLY|O_LARGEFILE, 0);
++		if (IS_ERR(s->query_file)) {
++			err = PTR_ERR(s->query_file);
++			s->query_file = NULL;
++			if (name == global_name) {
++				__putname(global_name);
++				global_name = NULL;
++			}
++			goto out;
++		}
++	}
++
++	/*
++	 * Set @name as new global default.
++	 */
++	if (!s->private_session && name != global_name) {
++		if (global_name) {
++			__putname(global_name);
++			global_name = NULL;
++		}
++		if (name) {
++			global_name = __getname();
++			if (global_name)
++				strcpy(global_name, name);
++			else
++				err = -ENOMEM;
++		}
++	}
++
++out:
++	mutex_unlock(&mutex);
++
++	return err;
++}
++
++static struct session *session_create(void)
++{
++	struct session *s;
++	int err = 0;
++
++	s = kzalloc(sizeof(*s), GFP_KERNEL);
++	if (s)
++		err = session_update_file(s, global_name);
++	else
++		err = -ENOMEM;
++
++	return err ? ERR_PTR(err) : s;
++}
++
++static int session_release(struct session *s)
++{
++	int err;
++
++	if (s->icur.inode)
++		iput(s->icur.inode);
++	err = session_update_file(s, CLOSE_SESSION);
++	if (!err)
++		kfree(s);
++
++	return err;
++}
++
++
++/*
++ * Listing of cached files.
++ *
++ * Usage:
++ * 		echo > /proc/filecache  # enter listing mode
++ * 		cat /proc/filecache     # get the file listing
++ */
++
++/*
++ * Full: there are more data following.
++ */
++static int ivec_full(struct session *s)
++{
++	return !s->ivec.cursor ||
++		s->ivec.cursor > s->ivec.origin + s->ivec.size;
++}
++
++static int ivec_push(struct session *s, struct inode *inode)
++{
++	s->ivec.cursor++;
++
++	if (s->ivec.size >= IVEC_SIZE)
++		return 1;
++
++	/*
++	 * Add possible filters here.
++	 * No permission check: we cannot verify the path's permission anyway.
++	 * We simply demand root previledge for accessing /proc/filecache.
++	 */
++
++	if (s->ivec.cursor > s->ivec.origin)
++		s->ivec.inodes[s->ivec.size++] = inode;
++	return 0;
++}
++
++/*
++ * Travease the inode lists in order - newest first.
++ * And fill @s->ivec.inodes with inodes positioned in [@pos, @pos+IVEC_SIZE).
++ */
++static int ivec_fill(struct session *s, unsigned long pos)
++{
++	struct inode *inode;
++	struct super_block *sb;
++
++	s->ivec.origin = pos;
++	s->ivec.cursor = 0;
++	s->ivec.size = 0;
++
++	/*
++	 * We have a cursor inode, clean and expected to be unchanged.
++	 */
++	if (s->icur.inode && pos >= s->icur.pos &&
++			!(s->icur.i_state & I_DIRTY) &&
++			s->icur.i_state == s->icur.inode->i_state) {
++		inode = s->icur.inode;
++		s->ivec.cursor = s->icur.pos;
++		goto continue_from_saved;
++	}
++
++	spin_lock(&sb_lock);
++	list_for_each_entry(sb, &super_blocks, s_list) {
++		list_for_each_entry(inode, &sb->s_dirty, i_list) {
++			if (ivec_push(s, inode))
++				goto out_full_unlock;
++		}
++		list_for_each_entry(inode, &sb->s_io, i_list) {
++			if (ivec_push(s, inode))
++				goto out_full_unlock;
++		}
++	}
++	spin_unlock(&sb_lock);
++
++	list_for_each_entry(inode, &inode_in_use, i_list) {
++		if (ivec_push(s, inode))
++			goto out_full;
++continue_from_saved:
++		;
++	}
++
++	list_for_each_entry(inode, &inode_unused, i_list) {
++		if (ivec_push(s, inode))
++			goto out_full;
++	}
++
++	return 0;
++
++out_full_unlock:
++	spin_unlock(&sb_lock);
++out_full:
++	return 1;
++}
++
++static struct inode *ivec_inode(struct session *s, unsigned long pos)
++{
++	if ((ivec_full(s) && pos >= s->ivec.origin + s->ivec.size)
++			  || pos < s->ivec.origin)
++		ivec_fill(s, pos);
++
++	if (pos >= s->ivec.cursor)
++		return NULL;
++
++	s->icur.pos = pos;
++	s->icur.inode = s->ivec.inodes[pos - s->ivec.origin];
++	return s->icur.inode;
++}
++
++static void show_inode(struct seq_file *m, struct inode *inode)
++{
++	char state[] = "--"; /* dirty, locked */
++	struct dentry *dentry;
++	loff_t size = i_size_read(inode);
++	unsigned long nrpages = inode->i_mapping->nrpages;
++	int percent;
++	int refcnt;
++	int shift;
++
++	if (!size)
++		size++;
++
++	for (shift = 0; (size >> shift) > ULONG_MAX / 128; shift += 12)
++		;
++	percent = min(100UL, (((100 * nrpages) >> shift) << PAGE_CACHE_SHIFT) /
++						(unsigned long)(size >> shift));
++
++	if (inode->i_state & (I_DIRTY_DATASYNC|I_DIRTY_PAGES))
++		state[0] = 'D';
++	else if (inode->i_state & I_DIRTY_SYNC)
++		state[0] = 'd';
++
++	if (inode->i_state & I_LOCK)
++		state[0] = 'L';
++
++	refcnt = 0;
++	list_for_each_entry(dentry, &inode->i_dentry, d_alias) {
++		refcnt += atomic_read(&dentry->d_count);
++	}
++
++	seq_printf(m, "%10lu %10llu %8lu %7d ",
++			inode->i_ino,
++			DIV_ROUND_UP(size, 1024),
++			nrpages << (PAGE_CACHE_SHIFT - 10),
++			percent);
++
++	seq_printf(m, "%6d %5s ",
++			refcnt,
++			state);
++
++	seq_printf(m, "%8u %5u %-16s",
++			inode->i_visit_count,
++			inode->i_cuid,
++			inode->i_comm);
++
++	seq_printf(m, "%02x:%02x(%s)\t",
++			MAJOR(inode->i_sb->s_dev),
++			MINOR(inode->i_sb->s_dev),
++			inode->i_sb->s_id);
++
++	if (list_empty(&inode->i_dentry)) {
++		if (!atomic_read(&inode->i_count))
++			seq_puts(m, "(noname)\n");
++		else
++			seq_printf(m, "(%02x:%02x)\n",
++					imajor(inode), iminor(inode));
++	} else {
++		dentry = list_entry(inode->i_dentry.next,
++							struct dentry, d_alias);
++		seq_path(m, NULL, dentry, " \t\n\\");
++		seq_putc(m, '\n');
++	}
++}
++
++static int inode_index_show(struct seq_file *m, void *v)
++{
++	unsigned long index = *(loff_t *) v;
++	struct session *s = m->private;
++        struct inode *inode;
++
++	if (index == 0) {
++		seq_puts(m, "# filecache " FILECACHE_VERSION "\n");
++		seq_puts(m, "#      ino       size   cached cached% "
++				"refcnt state "
++				"visitcnt   uid process         "
++				"dev\t\tfile\n");
++	}
++
++        inode = ivec_inode(s,index);
++	BUG_ON(!inode);
++	show_inode(m, inode);
++
++	return 0;
++}
++
++static void *inode_index_start(struct seq_file *m, loff_t *pos)
++{
++	struct session *s = m->private;
++
++	s->ivec.inodes = (struct inode **)__get_free_page(GFP_KERNEL);
++	if (!s->ivec.inodes)
++		return NULL;
++	s->ivec.size = 0;
++
++	spin_lock(&inode_lock);
++
++	BUG_ON(s->icur.pinned_inode);
++	s->icur.pinned_inode = s->icur.inode;
++	return ivec_inode(s, *pos) ? pos : NULL;
++}
++
++static void inode_index_stop(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++
++	if (s->icur.inode) {
++		__iget(s->icur.inode);
++		s->icur.i_state = s->icur.inode->i_state;
++	}
++
++	spin_unlock(&inode_lock);
++	free_page((unsigned long )s->ivec.inodes);
++
++	if (s->icur.pinned_inode) {
++		iput(s->icur.pinned_inode);
++		s->icur.pinned_inode = NULL;
++	}
++}
++
++static void *inode_index_next(struct seq_file *m, void *v, loff_t *pos)
++{
++	struct session *s = m->private;
++
++	(*pos)++;
++
++	return ivec_inode(s, *pos) ? pos : NULL;
++}
++
++/*
++ * Listing of cached page ranges of a file.
++ *
++ * Usage:
++ * 		echo 'file name' > /proc/filecache
++ * 		cat /proc/filecache
++ */
++
++unsigned long page_mask;
++#define PG_MMAP		PG_lru		/* reuse any non-relevant flag */
++#define PG_PARTIAL	PG_nosave	/* ditto */
++#define PG_COUNT	(sizeof(page_flag)/sizeof(page_flag[0]))
++
++/*
++ * Page state names, prefixed by their abbreviations.
++ */
++struct {
++	unsigned long	mask;
++	const char     *name;
++} page_flag [] = {
++	{1 << PG_referenced,	"R:referenced"},
++	{1 << PG_active,	"A:active"},
++
++	{1 << PG_uptodate,	"U:uptodate"},
++	{1 << PG_dirty,		"D:dirty"},
++	{1 << PG_writeback,	"W:writeback"},
++
++	{1 << PG_MMAP,		"M:mmap"},
++	{1 << PG_PARTIAL,	"P:partial"}, /* FIXME */
++
++};
++
++static unsigned long page_flags(struct page* page)
++{
++	unsigned long flags;
++
++	flags = page->flags & page_mask;
++
++	if (page_mapped(page))
++		flags |= (1 << PG_MMAP);
++
++	return flags;
++}
++
++static int pages_similiar(struct page* page0, struct page* page)
++{
++	if (page_count(page0) != page_count(page))
++		return 0;
++
++	if (page_flags(page0) != page_flags(page))
++		return 0;
++
++	return 1;
++}
++
++static void show_range(struct seq_file *m, struct page* page, unsigned long len)
++{
++	int i;
++	unsigned long flags;
++
++	if (!m || !page)
++		return;
++
++	seq_printf(m, "%lu\t%lu\t", page->index, len);
++
++	flags = page_flags(page);
++	for (i = 0; i < PG_COUNT; i++)
++		seq_putc(m, (flags & page_flag[i].mask) ?
++					page_flag[i].name[0] : '_');
++
++	seq_printf(m, "\t%d\n", page_count(page));
++}
++
++#define MAX_LINES	100
++static pgoff_t show_file_cache(struct seq_file *m,
++				struct address_space *mapping, pgoff_t start)
++{
++	int i;
++	int lines = 0;
++	pgoff_t len = 0;
++	struct pagevec pvec;
++	struct page *page;
++	struct page *page0 = NULL;
++
++	for (;;) {
++		pagevec_init(&pvec, 0);
++		pvec.nr = radix_tree_gang_lookup(&mapping->page_tree,
++				(void **)pvec.pages, start + len, PAGEVEC_SIZE);
++
++		if (pvec.nr == 0) {
++			show_range(m, page0, len);
++			start = ULONG_MAX;
++			goto out;
++		}
++
++		if (!page0)
++			page0 = pvec.pages[0];
++
++		for (i = 0; i < pvec.nr; i++) {
++			page = pvec.pages[i];
++
++			if (page->index == start + len &&
++					pages_similiar(page0, page))
++				len++;
++			else {
++				show_range(m, page0, len);
++				page0 = page;
++				start = page->index;
++				len = 1;
++				if (++lines > MAX_LINES)
++					goto out;
++			}
++		}
++	}
++
++out:
++	return start;
++}
++
++static int page_ranges_show(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++	pgoff_t offset;
++
++	if (!file)
++		return inode_index_show(m, v);
++
++	offset = *(loff_t *) v;
++
++	if (!offset) { /* print header */
++		int i;
++
++		seq_puts(m, "# file ");
++		seq_path(m, file->f_vfsmnt, file->f_dentry, " \t\n\\");
++
++		seq_puts(m, "\n# flags");
++		for (i = 0; i < PG_COUNT; i++)
++			seq_printf(m, " %s", page_flag[i].name);
++
++		seq_puts(m, "\n# idx\tlen\tstate\trefcnt\n");
++	}
++
++	s->next_offset = show_file_cache(m, file->f_mapping, offset);
++
++	return 0;
++}
++
++static int file_has_page(struct file *file, pgoff_t offset)
++{
++	loff_t size = i_size_read(file->f_mapping->host);
++	pgoff_t pages = DIV_ROUND_UP(size, PAGE_CACHE_SIZE);
++
++	return offset < pages;
++}
++
++static void *page_ranges_start(struct seq_file *m, loff_t *pos)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_start(m, pos);
++
++	read_lock_irq(&file->f_mapping->tree_lock);
++
++	return file_has_page(file, (pgoff_t)*pos) ? pos : NULL;
++}
++
++static void *page_ranges_next(struct seq_file *m, void *v, loff_t *pos)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_next(m, v, pos);
++
++	*pos = s->next_offset;
++	/* *pos = show_file_cache(NULL, file->f_mapping, *pos); */
++
++	return file_has_page(file, (pgoff_t)*pos) ? pos : NULL;
++}
++
++static void page_ranges_stop(struct seq_file *m, void *v)
++{
++	struct session *s = m->private;
++	struct file *file = s->query_file;
++
++	if (!file)
++		return inode_index_stop(m, v);
++
++	read_unlock_irq(&file->f_mapping->tree_lock);
++}
++
++struct seq_operations seq_filecache_op = {
++	.start	= page_ranges_start,
++	.next	= page_ranges_next,
++	.stop	= page_ranges_stop,
++	.show	= page_ranges_show,
++};
++
++/*
++ * Implement the manual drop-all-pagecache function
++ */
++
++static int drop_data(void)
++{
++	struct hlist_head *head;
++	struct hlist_node *node;
++	struct inode *inode;
++	struct inode **inodes;
++	unsigned long i, j, k;
++	int err = 0;
++
++	inodes = (struct inode **)__get_free_page(GFP_KERNEL);
++	if (!inodes)
++		return -ENOMEM;
++
++	for (i = 0; (head = get_inode_hash_budget(i)); i++) {
++		j = 0;
++		cond_resched();
++
++		/*
++		 * Grab some inodes.
++		 */
++		spin_lock(&inode_lock);
++		hlist_for_each (node, head) {
++			inode = hlist_entry(node, struct inode, i_hash);
++			if (inode->i_state & (I_FREEING|I_WILL_FREE))
++				continue;
++			if (!inode->i_mapping->nrpages)
++				continue;
++			__iget(inode);
++			inodes[j++] = inode;
++			if (j >= IVEC_SIZE)
++				break;
++		}
++		spin_unlock(&inode_lock);
++
++		/*
++		 * Free clean pages.
++		 */
++		for (k = 0; k < j; k++) {
++			inode = inodes[k];
++			invalidate_mapping_pages(inode->i_mapping, 0, ~1);
++			iput(inode);
++		}
++
++		/*
++		 * Simply ignore the remaining inodes.
++		 */
++		if (j >= IVEC_SIZE) {
++			printk(KERN_WARNING
++				"Too many collides in inode hash table.\n"
++				"Pls boot with a larger ihash_entries=XXX.\n");
++			err = -EAGAIN;
++		}
++	}
++
++	free_page((unsigned long)inodes);
++	return err;
++}
++
++static void drop_metadata(void)
++{
++	int nr_objects;
++
++	do {
++		nr_objects = shrink_slab(1000, GFP_KERNEL, 1000);
++	} while (nr_objects > 10);
++}
++
++/*
++ * Proc file operations.
++ */
++
++static int filecache_open(struct inode *inode, struct file *proc_file)
++{
++	struct seq_file *m;
++	struct session *s;
++	int ret;
++
++	s = session_create();
++	if (IS_ERR(s))
++		return PTR_ERR(s);
++	set_session(proc_file, s);
++
++	if (!(ret = seq_open(proc_file, &seq_filecache_op))) {
++		m = proc_file->private_data;
++		m->private = s;
++	}
++	return ret;
++}
++
++static int filecache_release(struct inode *inode, struct file *proc_file)
++{
++	struct session *s = get_session(proc_file);
++	int ret;
++
++	if (!(ret = session_release(s)))
++		ret = seq_release(inode, proc_file);
++	return ret;
++}
++
++ssize_t filecache_write(struct file *proc_file, const char __user * buffer,
++			size_t count, loff_t *ppos)
++{
++	struct session *s;
++	char *name;
++	int e = 0;
++
++	if (count >= PATH_MAX)
++		return -ENAMETOOLONG;
++
++	name = kmalloc(count+1, GFP_KERNEL);
++	if (!name)
++		return -ENOMEM;
++
++	if (copy_from_user(name, buffer, count)) {
++		e = -EFAULT;
++		goto out;
++	}
++
++	/* strip the optional newline */
++	if (count && name[count-1] == '\n')
++		name[count-1] = '\0';
++	else
++		name[count] = '\0';
++
++	if (!strncmp(name, "drop data", 9)) {
++		e = drop_data();
++		goto out;
++	}
++
++	if (!strncmp(name, "drop metadata", 13)) {
++		drop_metadata();
++		goto out;
++	}
++
++	s = get_session(proc_file);
++	if (!strcmp(name, "private session")) {
++		s->private_session = 1;
++		goto out;
++	}
++
++	if (!strncmp(name, "ls", 2)) {
++		e = session_update_file(s, "");
++		goto out;
++	}
++
++	e = session_update_file(s, name);
++
++out:
++	kfree(name);
++
++	return e ? e : count;
++}
++
++static struct file_operations proc_filecache_fops = {
++	.owner		= THIS_MODULE,
++	.open		= filecache_open,
++	.release	= filecache_release,
++	.write		= filecache_write,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++};
++
++
++static __init int filecache_init(void)
++{
++	int i;
++	struct proc_dir_entry *entry;
++
++	entry = create_proc_entry("filecache", 0600, NULL);
++	if (entry)
++		entry->proc_fops = &proc_filecache_fops;
++
++	/* Note: the faked flag PG_MMAP is not included. */
++	for (page_mask = i = 0; i < PG_COUNT - 1; i++)
++		page_mask |= page_flag[i].mask;
++
++	return 0;
++}
++
++static void filecache_exit(void)
++{
++	remove_proc_entry("filecache", NULL);
++}
++
++MODULE_AUTHOR("Fengguang Wu <wfg@ustc.edu>");
++MODULE_LICENSE("GPL");
++
++module_init(filecache_init);
++module_exit(filecache_exit);
+--- linux-2.6.20-rc3-mm1.orig/fs/inode.c
++++ linux-2.6.20-rc3-mm1/fs/inode.c
+@@ -164,6 +164,10 @@ static struct inode *alloc_inode(struct 
+ 		}
+ 		inode->i_private = NULL;
+ 		inode->i_mapping = mapping;
++#ifdef CONFIG_PROC_FILECACHE
++		inode->i_cuid = current->uid;
++		memcpy(inode->i_comm, current->comm, sizeof(current->comm));
++#endif
+ 	}
+ 	return inode;
+ }
+@@ -1353,6 +1357,16 @@ void inode_double_unlock(struct inode *i
+ }
+ EXPORT_SYMBOL(inode_double_unlock);
+ 
++
++struct hlist_head * get_inode_hash_budget(unsigned long index)
++{
++       if (index >= (1 << i_hash_shift))
++               return NULL;
++
++       return inode_hashtable + index;
++}
++EXPORT_SYMBOL_GPL(get_inode_hash_budget);
++
+ static __initdata unsigned long ihash_entries;
+ static int __init set_ihash_entries(char *str)
+ {
+--- linux-2.6.20-rc3-mm1.orig/include/linux/fs.h
++++ linux-2.6.20-rc3-mm1/include/linux/fs.h
+@@ -590,6 +590,12 @@ struct inode {
+ 	void			*i_security;
+ #endif
+ 	void			*i_private; /* fs or device private pointer */
++
++#ifdef CONFIG_PROC_FILECACHE
++	unsigned int		i_visit_count;	/* is this a hot file? */
++	uid_t			i_cuid;		/* created by whom? */
++	char			i_comm[16];	/* 16 == TASK_COMM_LEN */
++#endif
+ };
+ 
+ /*
+@@ -1739,6 +1745,7 @@ extern void remove_inode_hash(struct ino
+ static inline void insert_inode_hash(struct inode *inode) {
+ 	__insert_inode_hash(inode, inode->i_ino);
+ }
++struct hlist_head * get_inode_hash_budget(unsigned long index);
+ 
+ extern struct file * get_empty_filp(void);
+ extern void file_move(struct file *f, struct list_head *list);
+--- linux-2.6.20-rc3-mm1.orig/fs/open.c
++++ linux-2.6.20-rc3-mm1/fs/open.c
+@@ -702,6 +702,7 @@ static struct file *__dentry_open(struct
+ 			goto cleanup_all;
+ 	}
+ 
++	inode->i_visit_count++;
+ 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
+ 
+ 	file_ra_state_init(&f->f_ra, f->f_mapping->host->i_mapping);
+--- linux-2.6.20-rc3-mm1.orig/fs/Kconfig
++++ linux-2.6.20-rc3-mm1/fs/Kconfig
+@@ -1041,6 +1041,29 @@ config CONFIGFS_FS
+ 	  Both sysfs and configfs can and should exist together on the
+ 	  same system. One is not a replacement for the other.
+ 
++config PROC_FILECACHE
++	tristate "/proc/filecache support"
++	default m
++	depends on PROC_FS
++	help
++	  This option creates a file /proc/filecache which enables one to
++	  query/drop the cached files in memory.
++
++	  A quick start guide:
++
++	  # echo -n index > /proc/filecache
++	  # cat /proc/filecache
++
++	  # echo -n /bin/bash > /proc/filecache
++	  # cat /proc/filecache
++
++	  # echo drop data > /proc/filecache
++	  # echo drop metadata > /proc/filecache
++
++	  For more details, please check Documentation/filesystems/proc.txt .
++
++	  It can be a handy tool for sysadms and desktop users.
++
+ endmenu
+ 
+ menu "Miscellaneous filesystems"
+--- linux-2.6.20-rc3-mm1.orig/fs/proc/Makefile
++++ linux-2.6.20-rc3-mm1/fs/proc/Makefile
+@@ -2,7 +2,8 @@
+ # Makefile for the Linux proc filesystem routines.
+ #
+ 
+-obj-$(CONFIG_PROC_FS) += proc.o
++obj-$(CONFIG_PROC_FS)		+= proc.o
++obj-$(CONFIG_PROC_FILECACHE)	+= filecache.o
+ 
+ proc-y			:= nommu.o task_nommu.o
+ proc-$(CONFIG_MMU)	:= mmu.o task_mmu.o
+--- linux-2.6.20-rc3-mm1.orig/Documentation/filesystems/ext3.txt
++++ linux-2.6.20-rc3-mm1/Documentation/filesystems/ext3.txt
+@@ -121,6 +121,17 @@ nobh			(a) cache disk block mapping info
+ 			"nobh" option tries to avoid associating buffer
+ 			heads (supported only for "writeback" mode).
+ 
++iopen=no	(*)	Do not allow open-by-inode
++iopen=yes		Allow open by inode.  A special invisible directory
++			is present in the root of all filesystems that allows
++			users to open files by their inode number.  F.e.,
++			/.inode/314159 corresponds to the file with inode
++			314159 on the filesystem mounted at '/'.  Only root
++			may open-by-inode.
++iopen=all		Allow all users to open-by-inode.  This	circumvents
++			directory-based security.  A world-readable file in a
++			0700 directory is accessible by inode.
++
+ 
+ Specification
+ =============
+--- linux-2.6.20-rc3-mm1.orig/fs/ext3/inode.c
++++ linux-2.6.20-rc3-mm1/fs/ext3/inode.c
+@@ -37,6 +37,7 @@
+ #include <linux/mpage.h>
+ #include <linux/uio.h>
+ #include <linux/bio.h>
++#include "iopen.h"
+ #include "xattr.h"
+ #include "acl.h"
+ 
+@@ -2654,6 +2655,9 @@ void ext3_read_inode(struct inode * inod
+ 	struct buffer_head *bh;
+ 	int block;
+ 
++	if (ext3_iopen_get_inode(inode))
++		return;
++
+ #ifdef CONFIG_EXT3_FS_POSIX_ACL
+ 	ei->i_acl = EXT3_ACL_NOT_CACHED;
+ 	ei->i_default_acl = EXT3_ACL_NOT_CACHED;
+--- /dev/null
++++ linux-2.6.20-rc3-mm1/fs/ext3/iopen.c
+@@ -0,0 +1,144 @@
++/*
++ * fs/ext3/iopen.c - open-by-inode
++ *
++ * Copyright (C) 2001 Theodore Ts'o <tytso@alum.mit.edu>
++ * Copyright (C) 2006 Robert Love <rml@novell.com>
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 as published
++ * by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ */
++
++#include <linux/fs.h>
++#include <linux/ext3_jbd.h>
++#include <linux/ext3_fs.h>
++
++#include "iopen.h"
++
++#define IOPEN_NAME_LEN	32
++
++#define IOPEN_DIR	".inode"	/* special directory from which we iopen */
++#define IOPEN_DIR_LEN	6		/* strlen (IOPEN_DIR) */
++
++/*
++ * iopen_lookup - lookup by inode number, which is the dentry->d_name
++ */
++static struct dentry *iopen_lookup(struct inode *dir,
++				   struct dentry *dentry,
++				   struct nameidata *nd)
++{
++	char dname[IOPEN_NAME_LEN];
++	struct inode *inode;
++	unsigned long ino;
++
++	if (dentry->d_name.len >= IOPEN_NAME_LEN)
++		return ERR_PTR(-ENAMETOOLONG);
++
++	memcpy(dname, dentry->d_name.name, dentry->d_name.len);
++	dname[dentry->d_name.len] = 0;
++
++	if (!strcmp(dname, "."))
++		ino = dir->i_ino;
++	else if (!strcmp(dname, ".."))
++		ino = EXT3_ROOT_INO;
++	else
++		ino = simple_strtoul(dname, NULL, 0);
++
++	if (ino < EXT3_FIRST_INO(dir->i_sb) && ino != EXT3_ROOT_INO)
++		return ERR_PTR(-ENOENT);
++	if (ino > le32_to_cpu(EXT3_SB(dir->i_sb)->s_es->s_inodes_count))
++		return ERR_PTR(-ENOENT);
++
++	mutex_unlock(&dir->i_mutex);
++	inode = iget(dir->i_sb, ino);
++	mutex_lock(&dir->i_mutex);
++
++	if (!inode)
++		return ERR_PTR(-EACCES);
++
++	if (is_bad_inode(inode)) {
++		iput(inode);
++		return ERR_PTR(-ENOENT);
++	}
++
++	d_add(dentry, inode);
++
++	return NULL;
++}
++
++static struct inode_operations iopen_inode_operations = {
++	.lookup		= iopen_lookup,
++};
++
++static struct file_operations iopen_file_operations = {
++	.read		= generic_read_dir,
++};
++
++/*
++ * ext3_iopen_check - Called from fs/namei.c :: ext3_lookup().  Returns 1 if
++ * the filename is IOPEN_DIR and 0 otherwise.
++ */
++int ext3_iopen_check(struct inode *dir, struct dentry *dentry)
++{
++	struct inode *inode;
++
++	if (!test_opt(dir->i_sb, IOPEN))
++		return 0;
++	if (dir->i_ino != EXT3_ROOT_INO)
++		return 0;
++	if (dentry->d_name.len != IOPEN_DIR_LEN)
++		return 0;
++	if (strncmp(dentry->d_name.name, IOPEN_DIR, IOPEN_DIR_LEN))
++		return 0;
++
++	inode = iget(dir->i_sb, EXT3_BAD_INO);
++	if (!inode)
++		return 0;
++
++	d_add(dentry, inode);
++
++	return 1;
++}
++
++/*
++ * ext3_iopen_get_inode - Called from fs/inode.c :: ext3_read_inode().  Returns
++ * 1 if the inode number is that of /IOPEN_DIR, in which case the inode
++ * structure is filled in.  Otherwise, the function returns 0.
++ */
++int ext3_iopen_get_inode(struct inode *inode)
++{
++	struct ext3_inode_info *ei = EXT3_I(inode);
++
++	if (inode->i_ino != EXT3_BAD_INO)
++		return 0;
++
++	inode->i_mode = S_IFDIR | S_IRUSR | S_IXUSR;
++	if (test_opt(inode->i_sb, IOPEN_ALL))
++		inode->i_mode |= 0777;
++
++	inode->i_uid = 0;
++	inode->i_gid = 0;
++	inode->i_nlink = 1;
++	inode->i_size = 4096;
++	inode->i_atime = CURRENT_TIME;
++	inode->i_ctime = CURRENT_TIME;
++	inode->i_mtime = CURRENT_TIME;
++	inode->i_blocks = 0;
++	inode->i_version = 1;
++	inode->i_generation = 0;
++
++	inode->i_op = &iopen_inode_operations;
++	inode->i_fop = &iopen_file_operations;
++	inode->i_mapping->a_ops = NULL;
++
++	ei->i_state = 0;
++	ei->i_dir_start_lookup = 0;
++	ei->i_dtime = 0;
++
++	return 1;
++}
+--- /dev/null
++++ linux-2.6.20-rc3-mm1/fs/ext3/iopen.h
+@@ -0,0 +1,7 @@
++#ifndef _FS_EXT3_IOPEN_H
++#define _FS_EXT3_IOPEN_H
++
++int ext3_iopen_check(struct inode *dir, struct dentry *dentry);
++int ext3_iopen_get_inode(struct inode *inode);
++
++#endif	/* _FS_EXT3_IOPEN_H */
+--- linux-2.6.20-rc3-mm1.orig/fs/ext3/Makefile
++++ linux-2.6.20-rc3-mm1/fs/ext3/Makefile
+@@ -5,7 +5,7 @@
+ obj-$(CONFIG_EXT3_FS) += ext3.o
+ 
+ ext3-y	:= balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o \
+-	   ioctl.o namei.o super.o symlink.o hash.o resize.o ext3_jbd.o
++	   ioctl.o namei.o super.o symlink.o hash.o resize.o ext3_jbd.o iopen.o
+ 
+ ext3-$(CONFIG_EXT3_FS_XATTR)	 += xattr.o xattr_user.o xattr_trusted.o
+ ext3-$(CONFIG_EXT3_FS_POSIX_ACL) += acl.o
+--- linux-2.6.20-rc3-mm1.orig/fs/ext3/namei.c
++++ linux-2.6.20-rc3-mm1/fs/ext3/namei.c
+@@ -38,6 +38,7 @@
+ #include <linux/bio.h>
+ #include <linux/smp_lock.h>
+ 
++#include "iopen.h"
+ #include "namei.h"
+ #include "xattr.h"
+ #include "acl.h"
+@@ -1005,6 +1006,9 @@ static struct dentry *ext3_lookup(struct
+ 	if (dentry->d_name.len > EXT3_NAME_LEN)
+ 		return ERR_PTR(-ENAMETOOLONG);
+ 
++	if (ext3_iopen_check(dir, dentry))
++		return NULL;
++
+ 	bh = ext3_find_entry(dentry, &de);
+ 	inode = NULL;
+ 	if (bh) {
+--- linux-2.6.20-rc3-mm1.orig/fs/ext3/super.c
++++ linux-2.6.20-rc3-mm1/fs/ext3/super.c
+@@ -676,8 +676,8 @@ enum {
+ 	Opt_abort, Opt_data_journal, Opt_data_ordered, Opt_data_writeback,
+ 	Opt_usrjquota, Opt_grpjquota, Opt_offusrjquota, Opt_offgrpjquota,
+ 	Opt_jqfmt_vfsold, Opt_jqfmt_vfsv0, Opt_quota, Opt_noquota,
+-	Opt_ignore, Opt_barrier, Opt_err, Opt_resize, Opt_usrquota,
+-	Opt_grpquota
++	Opt_ignore, Opt_barrier, Opt_resize, Opt_usrquota, Opt_grpquota,
++	Opt_iopen_yes, Opt_iopen_all, Opt_iopen_no, Opt_err
+ };
+ 
+ static match_table_t tokens = {
+@@ -727,8 +727,11 @@ static match_table_t tokens = {
+ 	{Opt_quota, "quota"},
+ 	{Opt_usrquota, "usrquota"},
+ 	{Opt_barrier, "barrier=%u"},
+-	{Opt_err, NULL},
+ 	{Opt_resize, "resize"},
++	{Opt_iopen_yes, "iopen=yes"},
++	{Opt_iopen_all, "iopen=all"},
++	{Opt_iopen_no, "iopen=no"},
++	{Opt_err, NULL},
+ };
+ 
+ static ext3_fsblk_t get_sb_block(void **data)
+@@ -1059,6 +1062,18 @@ clear_qf_name:
+ 		case Opt_bh:
+ 			clear_opt(sbi->s_mount_opt, NOBH);
+ 			break;
++		case Opt_iopen_yes:
++			set_opt(sbi->s_mount_opt, IOPEN);
++			clear_opt(sbi->s_mount_opt, IOPEN_ALL);
++			break;
++		case Opt_iopen_all:
++			set_opt(sbi->s_mount_opt, IOPEN);
++			set_opt(sbi->s_mount_opt, IOPEN_ALL);
++			break;
++		case Opt_iopen_no:
++			clear_opt(sbi->s_mount_opt, IOPEN);
++			clear_opt(sbi->s_mount_opt, IOPEN_ALL);
++			break;
+ 		default:
+ 			printk (KERN_ERR
+ 				"EXT3-fs: Unrecognized mount option \"%s\" "
+@@ -1481,6 +1496,7 @@ static int ext3_fill_super (struct super
+ 	sbi->s_resgid = le16_to_cpu(es->s_def_resgid);
+ 
+ 	set_opt(sbi->s_mount_opt, RESERVATION);
++	set_opt(sbi->s_mount_opt, IOPEN);
+ 
+ 	if (!parse_options ((char *) data, sb, &journal_inum, &journal_devnum,
+ 			    NULL, 0))
+--- linux-2.6.20-rc3-mm1.orig/include/linux/ext3_fs.h
++++ linux-2.6.20-rc3-mm1/include/linux/ext3_fs.h
+@@ -384,6 +384,8 @@ struct ext3_inode {
+ #define EXT3_MOUNT_QUOTA		0x80000 /* Some quota option set */
+ #define EXT3_MOUNT_USRQUOTA		0x100000 /* "old" user quota */
+ #define EXT3_MOUNT_GRPQUOTA		0x200000 /* "old" group quota */
++#define EXT3_MOUNT_IOPEN		0x400000 /* allow open via inode */
++#define EXT3_MOUNT_IOPEN_ALL		0x800000 /* allow iopen for all */
+ 
+ /* Compatibility, for having both ext2_fs.h and ext3_fs.h included at once */
+ #ifndef _LINUX_EXT2_FS_H
