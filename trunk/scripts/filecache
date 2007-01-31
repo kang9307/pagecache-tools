@@ -433,6 +433,7 @@ end
 require 'optparse'
 require 'ostruct'
 require 'fileutils'
+require 'readline'
 
 $verbose = 0
 $cfiles = CachedFileList.new
@@ -623,6 +624,20 @@ opts = OptionParser.new do |opts|
   end
 end
 
-opts.parse(ARGV)
+if ARGV.size > 0
+  opts.parse(ARGV)
+else
+  @@filecache = File.open('/proc/filecache', File::RDWR)
+  @@filecache.syswrite('private session')
+  while buf = Readline.readline("> ", true)
+    # words = buf.split
+    @@filecache.rewind
+    @@filecache.syswrite(buf)
+    @@filecache.each_line do |line|
+      puts line
+    end
+  end
+end
+
 
 # vim: sw=2 ts=2 et
