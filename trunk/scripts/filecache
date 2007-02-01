@@ -28,7 +28,7 @@ class FileSystem
   end
 
   def to_s
-    "FileSystem:\t#{major}:#{minor}\t#{device_file}\t#{mount_point}\t#{fstype}"
+    "#{major}:#{minor}\t#{device_file}\t#{mount_point}\t#{fstype}"
   end
 
   def major()  @device_id >> 8    end
@@ -53,12 +53,15 @@ class FSTab
   # retrieve fs entries from /etc/fstab or /etc/mtab or /proc/mounts
   def initialize (file = '/etc/fstab')
 
+    @source_file = file
     @fs_by_id = Hash.new
 
     File.foreach(file) do |line|
 
       dev, mp, fstype, options = line.split
 
+      next if options == nil
+      next if line[0] == ?#
       next if mp[0] != ?/       # skip pseudo fs
       next if NOFS.has_key? fstype
       next if options =~ /loop/ # no need to readahead loop fs
@@ -86,7 +89,7 @@ class FSTab
   end
 
   def to_s
-    str = "FSTab:\n"
+    str = "#{@source_file}\n"
     @fs_by_id.each_value { |fs| str << "#{fs.to_s}\n" }
     str
   end
@@ -556,6 +559,15 @@ opts = OptionParser.new do |opts|
       printf "%8d %8d ",  f.collected, f.collected * 100 / (f.cached|1)
       printf "%-16s %-10s %s\n", f.process, mtab[f.dev].device_file, f.file
     end
+  end
+
+  opts.on('--mtab', 'show mounts info') do
+    mtab = FSTab.new '/etc/mtab'
+    puts mtab.to_s
+    fstab = FSTab.new '/etc/fstab'
+    puts fstab.to_s
+    mounts = FSTab.new '/proc/mounts'
+    puts mounts.to_s
   end
 
   opts.on('--account', 'show some accounting numbers') do
