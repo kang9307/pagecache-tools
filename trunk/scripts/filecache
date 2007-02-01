@@ -176,7 +176,7 @@ class CachedFile
 
   def blockdev?()  @dev == $BDEV_ID  end
   def empty?()     @pages.empty?     end
-  def referenced?(state)
+  def CachedFile.referenced?(state)
     state.include?(?R) or
     state.include?(?A) or
     state.include?(?M)
