@@ -176,6 +176,11 @@ class CachedFile
 
   def blockdev?()  @dev == $BDEV_ID  end
   def empty?()     @pages.empty?     end
+  def referenced?(state)
+    state.include?(?R) or
+    state.include?(?A) or
+    state.include?(?M)
+  end
 
   # a = a | b
   def union(b)
