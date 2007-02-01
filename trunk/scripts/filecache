@@ -122,6 +122,7 @@ class CachedFile
 
     @cached  = nil
     @cachedp = nil
+    @collected = nil
     @pages   = Hash.new
 
     @seq     = @@seq
@@ -138,6 +139,7 @@ class CachedFile
       next unless yield(idx, len, state, refcnt)
       add_page_range idx, len
     end
+    @collected = 4 * @pages.size
   end
 
   def add_page_range(idx, len = 1)
@@ -156,16 +158,20 @@ class CachedFile
     @size = (stat.size + 1023) / 1024
   end
 
-  def cachedp=(percent)
-    @cachedp = percent
-  end
-
-  def cached=(pages)
-    @cached = pages
+  def cached=(kb)
+    @cached = kb
   end
 
   def cached
     @cached || 4 * @pages.size    # TODO: respect PAGE_SIZE
+  end
+
+  def collected
+    @collected || 4 * @pages.size
+  end
+
+  def cachedp=(percent)
+    @cachedp = percent
   end
 
   def cachedp
@@ -544,14 +550,17 @@ opts = OptionParser.new do |opts|
     size = 0
     cached = 0
     ranges = 0
+    collected = 0
     $cfiles.each do |f|
       files = files + 1
       size = size + f.size
       cached = cached + f.cached
       ranges = ranges + f.page_ranges.size
+      collected += f.collected
     end
-    printf "total  %8d MiB in %8d\tfiles\n", size >> 10, files
-    printf "cached %8d MiB in %8d\tranges\n", cached >> 10, ranges
+    printf "total     %8d MiB\t%8d files\n", size >> 10, files
+    printf "cached    %8d MiB\t%15s\t%3d%%\n", cached >> 10, ' ', cached * 100 / (size|1)
+    printf "collected %8d MiB\t%8d ranges\t%3d%%\n", collected >> 10, ranges, collected * 100 / (cached|1)
   end
 
   opts.on('--defrag HABITAT', 'do poor man\'s defrag via dir HABITAT.') do |habitat|
