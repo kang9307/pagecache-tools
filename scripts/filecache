@@ -5,6 +5,12 @@ GC.disable # this gains us 0.2 second
 $BDEV_ID = 0xFFFF0002
 $BDEV_NAME = 'bdev'
 
+def referenced?(page_flags)
+  page_flags.include?(?R) or
+  page_flags.include?(?A) or
+  page_flags.include?(?M)
+end
+
 #
 # Class representing a fstab/mtab entry extended with device_id.
 #
@@ -176,11 +182,6 @@ class CachedFile
 
   def blockdev?()  @dev == $BDEV_ID  end
   def empty?()     @pages.empty?     end
-  def CachedFile.referenced?(state)
-    state.include?(?R) or
-    state.include?(?A) or
-    state.include?(?M)
-  end
 
   # a = a | b
   def union(b)
