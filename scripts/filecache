@@ -115,7 +115,7 @@ class CachedFile
   end
 
   attr_reader   :file, :seq, :pages
-  attr_accessor :dev,  :ino, :size, :state, :refcnt
+  attr_accessor :dev,  :ino, :size, :state, :refcnt, :process
 
   def initialize(file)
     @file    = file
@@ -123,6 +123,7 @@ class CachedFile
     @cached  = nil
     @cachedp = nil
     @collected = nil
+    @process = ''
     @pages   = Hash.new
 
     @seq     = @@seq
@@ -375,6 +376,9 @@ class CachedFileList
       cfile.cached  = cached.to_i
       cfile.cachedp = cachedp.to_i
       cfile.refcnt  = refcnt.to_i
+      cfile.process = process
+      # cfile.uid     = uid
+      # cfile.visitcnt = visitcnt
       @cfile_by_name[file] = cfile
     end # filecache.each_line
   end
@@ -542,6 +546,15 @@ opts = OptionParser.new do |opts|
         f.add_page_range(0, (f.size + 3) / 4)
       end
 
+    end
+  end
+
+  opts.on('--list', 'list size, cached, cachedp, collected, collectedp, process, dev, filename') do
+    mtab = FSTab.new '/etc/mtab'
+    $cfiles.each do |f|
+      printf "%8d %8d %8d ", f.size, f.cached, f.cached * 100 / (f.size|1)
+      printf "%8d %8d ",  f.collected, f.collected * 100 / (f.cached|1)
+      printf "%-16s %-10s %s\n", f.process, mtab[f.dev].device_file, f.file
     end
   end
 
