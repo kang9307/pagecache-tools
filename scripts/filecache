@@ -43,7 +43,7 @@ end
 #
 class FSTab
 
-  NOFS = { 
+  NOFS = {
       'tmpfs'  => 0, 'ramfs'   => 0, 'sysfs'      => 0, 'proc'        => 0,
       'rootfs' => 0, 'debugfs' => 0, 'securityfs' => 0, 'sockfs'      => 0,
       'pipefs' => 0, 'futexfs' => 0, 'inotifyfs'  => 0, 'eventpollfs' => 0,
@@ -111,14 +111,15 @@ class CachedFile
   def CachedFile.filecache
     unless defined? @@filecache
       @@filecache = File.open('/proc/filecache', File::RDWR)
-      @@filecache.syswrite('private session')
+      @@filecache.syswrite('set private')
       @@filecache.rewind
     end
     @@filecache
   end
 
   attr_reader   :file, :seq, :pages
-  attr_accessor :dev,  :ino, :size, :state, :refcnt, :process
+  attr_accessor :dev,  :ino, :size, :state, :refcnt
+  attr_accessor :process, :uid, :accessed
 
   def initialize(file)
     @file    = file
@@ -327,7 +328,7 @@ class CachedFileList
     read_filecache_index filecache
 
     @cfile_by_name.each_value do |cfile|
-      if cfile.cached > 0 
+      if cfile.cached > 0
         cfile.init_pages { |idx, len, state, refcnt| eval condition }
       end
     end
@@ -338,13 +339,25 @@ class CachedFileList
   # get the cached file list from /proc/filecache.
   def read_filecache_index(filecache)
     CachedFile.reset_seq
-    filecache.syswrite('')
+    headers = []
+    filecache.syswrite('ls')
     filecache.rewind
     filecache.each_line do |line|
-      next if line[0] == ?#
+      if line[0] == ?#
+        headers = line.split
+        headers.shift
+        if headers[0] == 'filecache' then
+          module_version = headers[1]
+        end
+        next
+      end
 
-      ino, size, cached, cachedp, refcnt, state, visitcnt, uid, process, dev, file = line.split
+      fields = {}
+      tmp = line.split
+      headers.each_index { |index| fields[headers[index]] = tmp[index] }
 
+      file = fields['file']
+      dev  = fields['dev']
       next if file == '(noname)'
       if file.include? ?\\
         file.gsub! '\011', "\011"  # ht
@@ -373,15 +386,15 @@ class CachedFileList
 
       cfile         = CachedFile.new file
       cfile.dev     = dev
-      cfile.state   = state
-      cfile.ino     = ino.to_i
-      cfile.size    = size.to_i
-      cfile.cached  = cached.to_i
-      cfile.cachedp = cachedp.to_i
-      cfile.refcnt  = refcnt.to_i
-      cfile.process = process
-      # cfile.uid     = uid
-      # cfile.visitcnt = visitcnt
+      cfile.state   = fields['state']
+      cfile.ino     = fields['ino'].to_i
+      cfile.size    = fields['size'].to_i
+      cfile.cached  = fields['cached'].to_i
+      cfile.cachedp = fields['cached%'].to_i
+      cfile.refcnt  = fields['refcnt'].to_i
+      cfile.process = fields['process']
+      cfile.uid     = fields['uid'].to_i
+      cfile.accessed = fields['accessed'].to_i
       @cfile_by_name[file] = cfile
     end # filecache.each_line
   end
@@ -469,18 +482,18 @@ opts = OptionParser.new do |opts|
   opts.on('-q', '--query [FILE]',
                 'query cached pages of FILE in /proc/filecache.') do |file|
     filecache = CachedFile.filecache
-    filecache.syswrite(file || '')
+    filecache.syswrite(file || 'ls')
     filecache.rewind
     filecache.each_line { |line| puts line }
   end
 
   opts.on('-D', '--drop [WHAT]',
-                'drop cached data or metadata.') do |what|
-    if what == nil or what == 'data'
-      CachedFile.filecache.syswrite "drop data"
+                'drop cached pages or slabs.') do |what|
+    if what == nil or what == 'pagecache'
+      CachedFile.filecache.syswrite "drop pagecache"
     end
-    if what == nil or what == 'metadata'
-      CachedFile.filecache.syswrite "drop metadata"
+    if what == nil or what == 'slabcache'
+      CachedFile.filecache.syswrite "drop slabcache"
     end
   end
 
@@ -668,7 +681,7 @@ if ARGV.size > 0
   opts.parse(ARGV)
 else
   @@filecache = File.open('/proc/filecache', File::RDWR)
-  @@filecache.syswrite('private session')
+  @@filecache.syswrite('set private')
   while buf = Readline.readline("> ", true)
     # words = buf.split
     @@filecache.rewind
